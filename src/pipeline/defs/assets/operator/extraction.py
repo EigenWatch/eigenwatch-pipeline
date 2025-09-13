@@ -2,6 +2,7 @@ from dagster import asset, OpExecutionContext
 import pandas as pd
 
 from pipeline.defs.resources import SubgraphDBResource
+from utils.normalizers import normalize_bytes_columns
 
 
 @asset(group_name="extraction")
@@ -35,18 +36,10 @@ def extract_operators(
         "updated_at",
     ]
 
-    # Convert byte arrays / memoryviews to readable strings
-    for col in ["address", "delegation_approver"]:
-        if col in df.columns:
-            df[col] = df[col].apply(
-                lambda x: (
-                    ",".join(map(str, x))
-                    if isinstance(x, (list, bytearray, memoryview))
-                    else x
-                )
-            )
+    # Normalize any bytes-like values to hex
+    df = normalize_bytes_columns(df)
 
-    # Convert timestamps from blockchain format to datetime
+    # Convert timestamps
     for ts_col in ["registered_at", "last_activity_at", "updated_at"]:
         if ts_col in df.columns:
             df[ts_col] = pd.to_datetime(df[ts_col], unit="s", errors="coerce")
@@ -78,16 +71,8 @@ def extract_staker_delegations(
         "log_index",
     ]
 
-    # Convert byte arrays to readable strings
-    for col in ["staker", "operator", "transaction_hash"]:
-        if col in df.columns:
-            df[col] = df[col].apply(
-                lambda x: (
-                    ",".join(map(str, x))
-                    if isinstance(x, (list, bytearray, memoryview))
-                    else x
-                )
-            )
+    # Normalize any bytes-like values to hex
+    df = normalize_bytes_columns(df)
 
     # Convert timestamp
     if "block_timestamp" in df.columns:
@@ -125,22 +110,8 @@ def extract_operator_share_events(
         "event_type",
     ]
 
-    # Convert byte arrays to readable strings
-    for col in [
-        "transaction_hash",
-        "contract_address",
-        "operator",
-        "staker",
-        "strategy",
-    ]:
-        if col in df.columns:
-            df[col] = df[col].apply(
-                lambda x: (
-                    ",".join(map(str, x))
-                    if isinstance(x, (list, bytearray, memoryview))
-                    else x
-                )
-            )
+    # Normalize any bytes-like values to hex
+    df = normalize_bytes_columns(df)
 
     # Convert timestamp
     if "block_timestamp" in df.columns:
@@ -182,16 +153,8 @@ def extract_operator_slashed_events(
         "description",
     ]
 
-    # Convert byte arrays to readable strings
-    for col in ["transaction_hash", "contract_address", "operator", "operator_set"]:
-        if col in df.columns:
-            df[col] = df[col].apply(
-                lambda x: (
-                    ",".join(map(str, x))
-                    if isinstance(x, (list, bytearray, memoryview))
-                    else x
-                )
-            )
+    # Normalize any bytes-like values to hex
+    df = normalize_bytes_columns(df)
 
     # Convert timestamp
     if "block_timestamp" in df.columns:
@@ -232,23 +195,8 @@ def extract_operator_commission_events(
         "target_operator_set",
     ]
 
-    # Convert byte arrays to readable strings
-    for col in [
-        "transaction_hash",
-        "contract_address",
-        "operator",
-        "caller",
-        "target_avs",
-        "target_operator_set",
-    ]:
-        if col in df.columns:
-            df[col] = df[col].apply(
-                lambda x: (
-                    ",".join(map(str, x))
-                    if isinstance(x, (list, bytearray, memoryview))
-                    else x
-                )
-            )
+    # Normalize any bytes-like values to hex
+    df = normalize_bytes_columns(df)
 
     # Convert timestamps
     for ts_col in ["block_timestamp", "activated_at"]:
@@ -288,16 +236,8 @@ def extract_staker_delegation_events(
         "delegation_type",
     ]
 
-    # Convert byte arrays to readable strings
-    for col in ["transaction_hash", "contract_address", "staker", "operator"]:
-        if col in df.columns:
-            df[col] = df[col].apply(
-                lambda x: (
-                    ",".join(map(str, x))
-                    if isinstance(x, (list, bytearray, memoryview))
-                    else x
-                )
-            )
+    # Normalize any bytes-like values to hex
+    df = normalize_bytes_columns(df)
 
     # Convert timestamp
     if "block_timestamp" in df.columns:

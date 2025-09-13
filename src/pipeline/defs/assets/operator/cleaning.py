@@ -1,7 +1,6 @@
 import os
 import pandas as pd
 from dagster import asset, OpExecutionContext
-from utils.debug_log import debug_log
 
 DEFAULT_REGISTERED_AT = os.getenv("DEFAULT_REGISTERED_AT", "2025-05-01T00:00:00Z")
 
