@@ -3,6 +3,7 @@ from sqlalchemy import create_engine, Engine
 from redis import Redis
 import pandas as pd
 import dagster as dg
+from sqlmodel import SQLModel, Session
 
 
 class SubgraphDBResource(ConfigurableResource):
@@ -40,6 +41,54 @@ class AnalyticsDBResource(ConfigurableResource):
     def execute_query(self, query: str) -> pd.DataFrame:
         with self.get_engine().connect() as conn:
             return pd.read_sql(query, conn)
+
+
+class SQLModelAnalyticsDBResource(AnalyticsDBResource):
+    """Enhanced analytics database resource with SQLModel support"""
+
+    def create_tables(self):
+        """Create all SQLModel tables"""
+        engine = self.get_engine()
+        SQLModel.metadata.create_all(engine)
+
+    def validate_and_store_dataframe(
+        self, df: pd.DataFrame, model_class: SQLModel, validate_rows: bool = False
+    ):
+        """Store DataFrame with optional row-by-row validation"""
+
+        if validate_rows:
+            # Slower but more robust - validates each row
+            validated_records = []
+            errors = []
+
+            for idx, row in df.iterrows():
+                try:
+                    # Convert row to dict and validate through SQLModel
+                    row_dict = row.to_dict()
+                    validated_record = model_class(**row_dict)
+                    validated_records.append(validated_record)
+                except Exception as e:
+                    errors.append(f"Row {idx}: {str(e)}")
+
+            if errors:
+                raise ValueError(f"Validation errors: {'; '.join(errors[:5])}")
+
+            # Bulk insert validated records
+            engine = self.get_engine()
+            with Session(engine) as session:
+                session.add_all(validated_records)
+                session.commit()
+
+        else:
+            # Faster bulk insert using pandas
+            engine = self.get_engine()
+            df.to_sql(
+                model_class.__tablename__,
+                engine,
+                if_exists="append",
+                index=False,
+                method="multi",
+            )
 
 
 class RedisResource(ConfigurableResource):
