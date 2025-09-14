@@ -1,13 +1,7 @@
 from dagster import asset, OpExecutionContext
 import pandas as pd
-from sqlmodel import text
 
-from pipeline.defs.resources import SQLModelAnalyticsDBResource
-from pipeline.defs.schema import (
-    ConcentrationMetrics,
-    OperatorAnalytics,
-    VolatilityMetrics,
-)
+from pipeline.defs.resources import AnalyticsDBResource
 
 
 @asset(group_name="storage", deps=["calculate_operator_risk_scores"])
@@ -84,7 +78,7 @@ def validate_risk_scores(
 def store_operator_analytics(
     context: OpExecutionContext,
     validate_risk_scores: pd.DataFrame,
-    analytics_db: SQLModelAnalyticsDBResource,
+    analytics_db: AnalyticsDBResource,
 ) -> None:
     """Store validated operator analytics to PostgreSQL"""
 
@@ -99,7 +93,7 @@ def store_operator_analytics(
         df["date"] = pd.to_datetime(df["date"]).dt.date
         df["calculated_at"] = pd.to_datetime(df["calculated_at"])
 
-        # Convert numpy types to Python native types for SQLModel compatibility
+        # Convert numpy types to Python native types for SQLAlchemy compatibility
         numeric_columns = [
             "risk_score",
             "confidence_score",
@@ -122,12 +116,16 @@ def store_operator_analytics(
             if col in df.columns:
                 df[col] = df[col].astype(int)
 
-        # Store using bulk pandas method for performance
-        analytics_db.validate_and_store_dataframe(
-            df,
-            OperatorAnalytics,
-            validate_rows=False,  # Skip row validation for performance
-        )
+        # Handle negative values that violate constraints
+        df.loc[df["snapshot_delegator_count"] < 0, "snapshot_delegator_count"] = 0
+        df.loc[df["snapshot_avs_count"] < 0, "snapshot_avs_count"] = 0
+        df.loc[df["slashing_event_count"] < 0, "slashing_event_count"] = 0
+        df.loc[df["operational_days"] < 0, "operational_days"] = 0
+
+        # Store using pandas method for performance
+        analytics_db.store_dataframe(
+            df, "operator_analytics", if_exists="replace"
+        )  # TODO: Look into having duplicate operator_id + date rows. I think it has to do with block ranges.
 
         context.log.info(f"✅ Successfully stored {len(df)} operator analytics records")
 
@@ -147,7 +145,7 @@ def store_operator_analytics(
 def store_concentration_metrics(
     context: OpExecutionContext,
     calculate_concentration_metrics: pd.DataFrame,
-    analytics_db: SQLModelAnalyticsDBResource,
+    analytics_db: AnalyticsDBResource,
 ) -> None:
     """Store concentration metrics to supporting table"""
 
@@ -174,9 +172,7 @@ def store_concentration_metrics(
     )
 
     try:
-        analytics_db.validate_and_store_dataframe(
-            df, ConcentrationMetrics, validate_rows=False
-        )
+        analytics_db.store_dataframe(df, "concentration_metrics", if_exists="append")
 
         context.log.info(f"✅ Stored concentration metrics for {len(df)} operators")
 
@@ -189,7 +185,7 @@ def store_concentration_metrics(
 def store_volatility_metrics(
     context: OpExecutionContext,
     calculate_volatility_metrics: pd.DataFrame,
-    analytics_db: SQLModelAnalyticsDBResource,
+    analytics_db: AnalyticsDBResource,
 ) -> None:
     """Store volatility metrics to supporting table"""
 
@@ -209,10 +205,10 @@ def store_volatility_metrics(
     df["trend_direction"] = None
     df["trend_strength"] = None
 
+    df = df.drop(columns=["operator_id", "data_points"])
+
     try:
-        analytics_db.validate_and_store_dataframe(
-            df, VolatilityMetrics, validate_rows=False
-        )
+        analytics_db.store_dataframe(df, "volatility_metrics", if_exists="append")
 
         context.log.info(f"✅ Stored volatility metrics for {len(df)} operators")
 
@@ -224,14 +220,12 @@ def store_volatility_metrics(
 @asset(group_name="storage")
 def generate_storage_summary(
     context: OpExecutionContext,
-    analytics_db: SQLModelAnalyticsDBResource,
+    analytics_db: AnalyticsDBResource,
 ) -> dict:
     """Generate summary of stored data for monitoring"""
 
     try:
-        engine = analytics_db.get_engine()
-
-        # Query summary statistics
+        # Query summary statistics using raw SQL
         summary_query = """
         SELECT 
             COUNT(*) as total_records,
@@ -249,27 +243,50 @@ def generate_storage_summary(
         WHERE date = CURRENT_DATE
         """
 
-        with engine.connect() as conn:
-            result = conn.execute(text(summary_query)).fetchone()
+        result_df = analytics_db.execute_query(summary_query)
 
-        summary = {
-            "total_records": result[0],
-            "unique_operators": result[1],
-            "earliest_date": str(result[2]) if result[2] else None,
-            "latest_date": str(result[3]) if result[3] else None,
-            "avg_risk_score": float(result[4]) if result[4] else 0,
-            "avg_confidence": float(result[5]) if result[5] else 0,
-            "risk_distribution": {
-                "LOW": result[6] or 0,
-                "MEDIUM": result[7] or 0,
-                "HIGH": result[8] or 0,
-                "CRITICAL": result[9] or 0,
-            },
-            "sufficient_data_count": result[10] or 0,
-            "data_quality_percentage": (
-                (result[10] / result[0] * 100) if result[0] > 0 else 0
-            ),
-        }
+        if result_df.empty:
+            summary = {
+                "total_records": 0,
+                "unique_operators": 0,
+                "earliest_date": None,
+                "latest_date": None,
+                "avg_risk_score": 0,
+                "avg_confidence": 0,
+                "risk_distribution": {"LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0},
+                "sufficient_data_count": 0,
+                "data_quality_percentage": 0,
+            }
+        else:
+            result = result_df.iloc[0]
+            summary = {
+                "total_records": int(result["total_records"]),
+                "unique_operators": int(result["unique_operators"]),
+                "earliest_date": (
+                    str(result["earliest_date"]) if result["earliest_date"] else None
+                ),
+                "latest_date": (
+                    str(result["latest_date"]) if result["latest_date"] else None
+                ),
+                "avg_risk_score": (
+                    float(result["avg_risk_score"]) if result["avg_risk_score"] else 0
+                ),
+                "avg_confidence": (
+                    float(result["avg_confidence"]) if result["avg_confidence"] else 0
+                ),
+                "risk_distribution": {
+                    "LOW": int(result["low_risk_count"] or 0),
+                    "MEDIUM": int(result["medium_risk_count"] or 0),
+                    "HIGH": int(result["high_risk_count"] or 0),
+                    "CRITICAL": int(result["critical_risk_count"] or 0),
+                },
+                "sufficient_data_count": int(result["sufficient_data_count"] or 0),
+                "data_quality_percentage": (
+                    (result["sufficient_data_count"] / result["total_records"] * 100)
+                    if result["total_records"] > 0
+                    else 0
+                ),
+            }
 
         # Log comprehensive summary
         context.log.info("=== STORAGE SUMMARY ===")

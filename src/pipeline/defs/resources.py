@@ -3,7 +3,6 @@ from sqlalchemy import create_engine, Engine
 from redis import Redis
 import pandas as pd
 import dagster as dg
-from sqlmodel import SQLModel, Session
 
 
 class SubgraphDBResource(ConfigurableResource):
@@ -42,53 +41,12 @@ class AnalyticsDBResource(ConfigurableResource):
         with self.get_engine().connect() as conn:
             return pd.read_sql(query, conn)
 
-
-class SQLModelAnalyticsDBResource(AnalyticsDBResource):
-    """Enhanced analytics database resource with SQLModel support"""
-
     def create_tables(self):
-        """Create all SQLModel tables"""
+        """Create all tables using SQLAlchemy metadata"""
+        from pipeline.defs.schema import Base
+
         engine = self.get_engine()
-        SQLModel.metadata.create_all(engine)
-
-    def validate_and_store_dataframe(
-        self, df: pd.DataFrame, model_class: SQLModel, validate_rows: bool = False
-    ):
-        """Store DataFrame with optional row-by-row validation"""
-
-        if validate_rows:
-            # Slower but more robust - validates each row
-            validated_records = []
-            errors = []
-
-            for idx, row in df.iterrows():
-                try:
-                    # Convert row to dict and validate through SQLModel
-                    row_dict = row.to_dict()
-                    validated_record = model_class(**row_dict)
-                    validated_records.append(validated_record)
-                except Exception as e:
-                    errors.append(f"Row {idx}: {str(e)}")
-
-            if errors:
-                raise ValueError(f"Validation errors: {'; '.join(errors[:5])}")
-
-            # Bulk insert validated records
-            engine = self.get_engine()
-            with Session(engine) as session:
-                session.add_all(validated_records)
-                session.commit()
-
-        else:
-            # Faster bulk insert using pandas
-            engine = self.get_engine()
-            df.to_sql(
-                model_class.__tablename__,
-                engine,
-                if_exists="append",
-                index=False,
-                method="multi",
-            )
+        Base.metadata.create_all(engine)
 
 
 class RedisResource(ConfigurableResource):
@@ -109,9 +67,14 @@ class RedisResource(ConfigurableResource):
             redis_client.delete(*keys)
 
 
+# Resource instances
 subgraph_db = SubgraphDBResource(
     db_uri="postgresql://graph-node:eigenwatch-2k25@localhost:5433/graph-node",
     deployment_hash="sgd2",  # TODO: Find a way to make this dynamic so we do not have to change it with every new deployment
+)
+
+analytics_db = AnalyticsDBResource(
+    db_uri="postgresql+psycopg2://postgres:secret@localhost:5432/analytics"
 )
 
 
@@ -120,7 +83,7 @@ def resources():
     return dg.Definitions(
         resources={
             "subgraph_db": subgraph_db,
-            # "analytics_db": AnalyticsDBResource(db_uri=""),
+            "analytics_db": analytics_db,
             # "redis": RedisResource(),
         }
     )
