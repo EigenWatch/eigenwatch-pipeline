@@ -7,9 +7,9 @@ from sqlalchemy import (
     Date,
     DateTime,
     Boolean,
-    CheckConstraint,
-    PrimaryKeyConstraint,
     Index,
+    UniqueConstraint,
+    Sequence,
 )
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -21,106 +21,46 @@ class OperatorAnalytics(Base):
 
     __tablename__ = "operator_analytics"
 
-    # Primary Keys
+    # Primary Key
+    id = Column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+    # Existing Composite Key as Unique Constraint
     operator_id = Column(String(50), nullable=False)
     date = Column(Date, nullable=False)
 
     # Risk Assessment Scores
-    risk_score = Column(
-        Numeric(5, 2),
-        CheckConstraint("risk_score >= 0 AND risk_score <= 100"),
-        nullable=False,
-    )
-    confidence_score = Column(
-        Numeric(5, 2),
-        CheckConstraint("confidence_score >= 0 AND confidence_score <= 100"),
-        nullable=False,
-    )
-    risk_level = Column(
-        String(10),
-        CheckConstraint("risk_level IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')"),
-        nullable=False,
-    )
+    risk_score = Column(Numeric(5, 2), nullable=False)
+    confidence_score = Column(Numeric(5, 2), nullable=False)
+    risk_level = Column(String(10), nullable=False)
 
     # Component Scores
-    performance_score = Column(
-        Numeric(5, 2),
-        CheckConstraint("performance_score >= 0 AND performance_score <= 100"),
-    )
-    economic_score = Column(
-        Numeric(5, 2),
-        CheckConstraint("economic_score >= 0 AND economic_score <= 100"),
-    )
-    network_position_score = Column(
-        Numeric(5, 2),
-        CheckConstraint(
-            "network_position_score >= 0 AND network_position_score <= 100"
-        ),
-    )
+    performance_score = Column(Numeric(5, 2))
+    economic_score = Column(Numeric(5, 2))
+    network_position_score = Column(Numeric(5, 2))
 
     # Calculated Metrics
-    delegation_hhi = Column(
-        Numeric(6, 4),
-        CheckConstraint("delegation_hhi >= 0 AND delegation_hhi <= 1"),
-    )
+    delegation_hhi = Column(Numeric(6, 4))
     delegation_volatility_7d = Column(Numeric(8, 4))
     delegation_volatility_30d = Column(Numeric(8, 4))
     delegation_volatility_90d = Column(Numeric(8, 4))
     growth_rate_30d = Column(Numeric(8, 4))
-    growth_consistency_score = Column(
-        Numeric(5, 2),
-        CheckConstraint(
-            "growth_consistency_score IS NULL OR (growth_consistency_score >= 0 AND growth_consistency_score <= 100)"
-        ),
-    )
-    size_percentile = Column(
-        Numeric(5, 2),
-        CheckConstraint(
-            "size_percentile IS NULL OR (size_percentile >= 0 AND size_percentile <= 100)"
-        ),
-    )
-    delegator_distribution_cv = Column(
-        Numeric(8, 4),
-        CheckConstraint(
-            "delegator_distribution_cv IS NULL OR delegator_distribution_cv >= 0"
-        ),
-    )
+    growth_consistency_score = Column(Numeric(5, 2))
+    size_percentile = Column(Numeric(5, 2))
+    delegator_distribution_cv = Column(Numeric(8, 4))
 
     # Snapshot Metrics (point-in-time values)
-    snapshot_total_delegated_shares = Column(
-        Numeric,
-        CheckConstraint("snapshot_total_delegated_shares >= 0"),
-        default=0,
-    )
-    snapshot_delegator_count = Column(
-        Integer,
-        CheckConstraint("snapshot_delegator_count >= 0"),
-        default=0,
-    )
-    snapshot_avs_count = Column(
-        Integer,
-        CheckConstraint("snapshot_avs_count >= 0"),
-        default=0,
-    )
-    snapshot_commission_bips = Column(
-        Numeric(8, 2),
-        CheckConstraint(
-            "snapshot_commission_bips IS NULL OR snapshot_commission_bips >= 0"
-        ),
-    )
+    snapshot_total_delegated_shares = Column(Numeric, default=0)
+    snapshot_delegator_count = Column(Integer, default=0)
+    snapshot_avs_count = Column(Integer, default=0)
+    snapshot_commission_bips = Column(Numeric(8, 2))
 
     # Operational Metrics
-    slashing_event_count = Column(
-        Integer,
-        CheckConstraint("slashing_event_count >= 0"),
-        default=0,
-    )
-    lifetime_slashing_amount = Column(
-        Numeric(20, 6),
-        CheckConstraint("lifetime_slashing_amount >= 0"),
-        default=0,
-    )
-    operational_days = Column(Integer, CheckConstraint("operational_days >= 0"))
+    slashing_event_count = Column(Integer, default=0)
+    lifetime_slashing_amount = Column(Numeric(20, 6), default=0)
+    operational_days = Column(Integer)
 
     # Status Flags
     is_active = Column(Boolean, default=True)
@@ -128,15 +68,10 @@ class OperatorAnalytics(Base):
 
     # Metadata
     calculated_at = Column(DateTime, default=datetime.now)
-    calculation_duration_ms = Column(
-        Integer,
-        CheckConstraint(
-            "calculation_duration_ms IS NULL OR calculation_duration_ms >= 0"
-        ),
-    )
+    calculation_duration_ms = Column(Integer)
 
     __table_args__ = (
-        PrimaryKeyConstraint("operator_id", "date"),
+        # UniqueConstraint("operator_id", "date", name="uix_operator_analytics"),
         Index("idx_operator_analytics_date_risk", "date", "risk_score"),
         Index("idx_operator_analytics_date_active", "date", "is_active"),
     )
@@ -147,6 +82,13 @@ class VolatilityMetrics(Base):
 
     __tablename__ = "volatility_metrics"
 
+    # Primary Key
+    id = Column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+    # Existing Composite Key as Unique Constraint
     entity_type = Column(String(20), nullable=False)
     entity_id = Column(String(50), nullable=False)
     date = Column(Date, nullable=False)
@@ -161,16 +103,17 @@ class VolatilityMetrics(Base):
     trend_direction = Column(Numeric(8, 4))
     trend_strength = Column(Numeric(6, 4))
 
-    data_points_count = Column(Integer, CheckConstraint("data_points_count >= 0"))
-    confidence_score = Column(
-        Numeric(5, 2),
-        CheckConstraint(
-            "confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 100)"
-        ),
-    )
+    data_points_count = Column(Integer)
+    confidence_score = Column(Numeric(5, 2))
 
     __table_args__ = (
-        PrimaryKeyConstraint("entity_type", "entity_id", "date", "metric_type"),
+        UniqueConstraint(
+            "entity_type",
+            "entity_id",
+            "date",
+            "metric_type",
+            name="uix_volatility_metrics",
+        ),
     )
 
 
@@ -179,46 +122,41 @@ class ConcentrationMetrics(Base):
 
     __tablename__ = "concentration_metrics"
 
+    # Primary Key
+    id = Column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+
+    # Existing Composite Key as Unique Constraint
     entity_type = Column(String(20), nullable=False)
     entity_id = Column(String(50), nullable=False)
     date = Column(Date, nullable=False)
     concentration_type = Column(String(20), nullable=False)
 
-    hhi_value = Column(
-        Numeric(6, 4),
-        CheckConstraint("hhi_value >= 0 AND hhi_value <= 1"),
-    )
-    gini_coefficient = Column(
-        Numeric(6, 4),
-        CheckConstraint(
-            "gini_coefficient IS NULL OR (gini_coefficient >= 0 AND gini_coefficient <= 1)"
-        ),
-    )
-    top_1_percentage = Column(
-        Numeric(5, 2),
-        CheckConstraint(
-            "top_1_percentage IS NULL OR (top_1_percentage >= 0 AND top_1_percentage <= 100)"
-        ),
-    )
-    top_5_percentage = Column(
-        Numeric(5, 2),
-        CheckConstraint(
-            "top_5_percentage IS NULL OR (top_5_percentage >= 0 AND top_5_percentage <= 100)"
-        ),
-    )
-    top_10_percentage = Column(
-        Numeric(5, 2),
-        CheckConstraint(
-            "top_10_percentage IS NULL OR (top_10_percentage >= 0 AND top_10_percentage <= 100)"
-        ),
-    )
+    # Concentration metrics
+    hhi_value = Column(Numeric(6, 4))
+    gini_coefficient = Column(Numeric(6, 4))
+    coefficient_of_variation = Column(Numeric)  # Added back
 
-    total_entities = Column(Integer, CheckConstraint("total_entities >= 0"))
-    effective_entities = Column(
-        Numeric(8, 2),
-        CheckConstraint("effective_entities IS NULL OR effective_entities >= 0"),
-    )
+    top_1_percentage = Column(Numeric(5, 2))
+    top_5_percentage = Column(Numeric(5, 2))
+    top_10_percentage = Column(Numeric(5, 2))
+
+    total_entities = Column(Integer)
+    effective_entities = Column(Numeric(8, 2))
+    total_amount = Column(Numeric)  # Added back, numeric for large values
+
+    # Operator field (address / identifier)
+    operator_id = Column(String(50), nullable=True)  # Added back
 
     __table_args__ = (
-        PrimaryKeyConstraint("entity_type", "entity_id", "date", "concentration_type"),
+        UniqueConstraint(
+            "entity_type",
+            "entity_id",
+            "date",
+            "concentration_type",
+            name="uix_concentration_metrics",
+        ),
     )

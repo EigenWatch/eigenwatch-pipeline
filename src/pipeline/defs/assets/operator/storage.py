@@ -124,7 +124,7 @@ def store_operator_analytics(
 
         # Store using pandas method for performance
         analytics_db.store_dataframe(
-            df, "operator_analytics", if_exists="replace"
+            df, "operator_analytics", if_exists="append"
         )  # TODO: Look into having duplicate operator_id + date rows. I think it has to do with block ranges.
 
         context.log.info(f"✅ Successfully stored {len(df)} operator analytics records")
@@ -141,6 +141,7 @@ def store_operator_analytics(
         raise
 
 
+# TODO: Review what is stored here
 @asset(group_name="storage", deps=["calculate_concentration_metrics"])
 def store_concentration_metrics(
     context: OpExecutionContext,
@@ -170,6 +171,10 @@ def store_concentration_metrics(
         ),
         axis=1,
     )
+
+    # df = df.drop(
+    #     columns=["operator_id", "coefficient_of_variation", "total_amount"]
+    # )
 
     try:
         analytics_db.store_dataframe(df, "concentration_metrics", if_exists="append")
