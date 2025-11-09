@@ -9,7 +9,6 @@ from sqlalchemy import (
     Boolean,
     Index,
     UniqueConstraint,
-    Sequence,
 )
 from sqlalchemy.ext.declarative import declarative_base
 
