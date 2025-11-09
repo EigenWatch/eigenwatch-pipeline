@@ -43,10 +43,10 @@ class AnalyticsDBResource(ConfigurableResource):
 
     def create_tables(self):
         """Create all tables using SQLAlchemy metadata"""
-        from pipeline.defs.schema import Base
+        # from db.schema import Base
 
-        engine = self.get_engine()
-        Base.metadata.create_all(engine)
+        # engine = self.get_engine()
+        # Base.metadata.create_all(engine)
 
 
 class RedisResource(ConfigurableResource):
