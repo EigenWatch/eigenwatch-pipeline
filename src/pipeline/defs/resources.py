@@ -88,13 +88,8 @@ analytics_db = AnalyticsDBResource(
 class DatabaseResource(ConfigurableResource):
     """Database resource for managing connections to both event and analytics databases"""
 
-    events_db_url: str = os.getenv(
-        "EVENTS_DB_URL", "postgresql://user:password@localhost:5432/eigenlayer_events"
-    )
-    analytics_db_url: str = os.getenv(
-        "ANALYTICS_DB_URL",
-        "postgresql://user:password@localhost:5432/eigenlayer_analytics",
-    )
+    events_db_url: str = os.getenv("EVENTS_DB_URL")
+    analytics_db_url: str = os.getenv("ANALYTICS_DB_URL")
 
     pool_size: int = 5
     max_overflow: int = 10

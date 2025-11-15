@@ -3,11 +3,15 @@
 Extraction Assets - Identify operators with changes since last run
 """
 
-from dagster import asset, OpExecutionContext, Output, MetadataValue
+from dagster import asset, OpExecutionContext
 from datetime import datetime, timezone
 from typing import Set
 from ..resources import DatabaseResource, ConfigResource
 from utils.sql_queries import get_operators_since_last_run
+
+from dagster import asset
+from typing import Set
+from datetime import datetime, timezone
 
 
 @asset(
@@ -31,7 +35,7 @@ def changed_operators_since_last_run(
     checkpoint_result = db.execute_query(
         config.get_checkpoint_query(),
         {"pipeline_name": config.checkpoint_key},
-        db="analytics",  # TODO: review db name
+        db="analytics",
     )
 
     if checkpoint_result:
@@ -45,7 +49,7 @@ def changed_operators_since_last_run(
     results = db.execute_query(
         get_operators_since_last_run,
         {"last_processed_at": last_processed_at},
-        db="events",  # TODO: review db name
+        db="events",
     )
 
     changed_operators = {row[0] for row in results}
@@ -56,23 +60,9 @@ def changed_operators_since_last_run(
         f"Found {len(changed_operators)} operators with changes "
         f"since {last_processed_at}"
     )
-
-    # Early exit if no changes
-    if not changed_operators:
-        context.log.info("No operators to process - exiting early")
-        return changed_operators
-
-    # Log metadata
-    return Output(
-        changed_operators,
-        metadata={
-            "num_operators": len(changed_operators),
-            "last_processed_at": str(last_processed_at),
-            "query_duration_seconds": duration,
-            "sample_operators": (
-                MetadataValue.text("\n".join(list(changed_operators)[:5]))
-                if changed_operators
-                else "None"
-            ),
-        },
+    context.log.info(
+        f"Query duration: {duration:.2f}s, "
+        f"Sample operators: {', '.join(list(changed_operators)[:5]) if changed_operators else 'None'}"
     )
+
+    return changed_operators
