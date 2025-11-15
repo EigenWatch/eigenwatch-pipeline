@@ -2,20 +2,17 @@
 from .base_builder import BaseQueryBuilder
 
 slashing_incidents_query = """
-WITH slashing_events AS (
-    SELECT 
-        operator_id,
-        operator_set_id,
-        block_timestamp as slashed_at,
-        block_number as slashed_at_block,
-        description,
-        transaction_hash,
-        NOW() as created_at,
-        NOW() as updated_at
-    FROM operator_slashed_events
-    WHERE operator_id = :operator_id
-)
-SELECT * FROM slashing_events
+SELECT 
+    operator_id,
+    operator_set_id,
+    slashed_at,
+    block_number as slashed_at_block,
+    description,
+    transaction_hash,
+    NOW() as created_at,
+    NOW() as updated_at
+FROM slashing_events_cache
+WHERE operator_id = :operator_id
 """
 
 

@@ -1,6 +1,7 @@
 # CORE OPERATOR TABLES
 from datetime import datetime
 from sqlalchemy import (
+    ARRAY,
     BigInteger,
     Column,
     Date,
@@ -224,7 +225,7 @@ class OperatorAVSRegistrationHistory(Base, TimestampMixin):
     status_changed_block = Column(Integer, nullable=False)
 
     # Event reference
-    event_id = Column(Integer)
+    event_id = Column(String)
     transaction_hash = Column(String)
 
     __table_args__ = (
@@ -747,3 +748,26 @@ class OperatorSet(Base, TimestampMixin):
     operator_set_id = Column(Integer, nullable=False)
 
     __table_args__ = (Index("idx_operator_set_avs", "avs_id"),)
+
+
+# ========================================
+# CACHE TABLE SCHEMA (add to models.py)
+# ========================================
+
+
+class SlashingEventsCache(Base, TimestampMixin):
+    """Temporary cache of slashing events from events DB"""
+
+    __tablename__ = "slashing_events_cache"
+
+    operator_id = Column(String, nullable=False, primary_key=True)
+    block_number = Column(Integer, nullable=False, primary_key=True)
+    transaction_hash = Column(String, nullable=False, primary_key=True)
+
+    operator_set_id = Column(String, nullable=False)
+    slashed_at = Column(DateTime, nullable=False)
+    description = Column(String)
+    strategies = Column(ARRAY(String), nullable=False)
+    wad_slashed = Column(ARRAY(Numeric), nullable=False)
+
+    __table_args__ = (Index("idx_slashing_cache_operator", "operator_id"),)

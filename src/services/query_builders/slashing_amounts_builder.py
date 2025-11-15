@@ -7,13 +7,13 @@ WITH recent_incidents AS (
         si.id as slashing_incident_id,
         si.operator_id,
         si.slashed_at,
-        ose.strategies,
-        ose.wad_slashed
+        sec.strategies,
+        sec.wad_slashed
     FROM operator_slashing_incidents si
-    JOIN operator_slashed_events ose 
-        ON si.operator_id = ose.operator_id
-        AND si.slashed_at_block = ose.block_number
-        AND si.transaction_hash = ose.transaction_hash
+    JOIN slashing_events_cache sec
+        ON si.operator_id = sec.operator_id
+        AND si.slashed_at_block = sec.block_number
+        AND si.transaction_hash = sec.transaction_hash
     WHERE si.operator_id = :operator_id
 ),
 unpacked_slashing AS (
@@ -45,11 +45,11 @@ class SlashingAmountsQueryBuilder(BaseQueryBuilder):
         return """
 INSERT INTO operator_slashing_amounts (
     slashing_incident_id, operator_id, strategy_id, wad_slashed,
-    slashed_at, created_at, updated_at
+    created_at, updated_at
 )
 VALUES (
     :slashing_incident_id, :operator_id, :strategy_id, :wad_slashed,
-    :slashed_at, :created_at, :updated_at
+    :created_at, :updated_at
 )
 ON CONFLICT DO NOTHING
 """
@@ -63,7 +63,6 @@ ON CONFLICT DO NOTHING
             "operator_id",
             "strategy_id",
             "wad_slashed",
-            "slashed_at",
             "created_at",
             "updated_at",
         ]

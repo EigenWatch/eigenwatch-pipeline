@@ -1,11 +1,13 @@
-# services/reconstructors/slashing_incidents.py
+# services/reconstructors/slashing_events_cache.py
 from .base import BaseReconstructor, FieldValidator
-from ..query_builders.slashing_incidents_builder import SlashingIncidentsQueryBuilder
+from ..query_builders.slashing_events_cache_builder import (
+    SlashingEventsCacheQueryBuilder,
+)
 
 
-class SlashingIncidentsReconstructor(BaseReconstructor):
+class SlashingEventsCacheReconstructor(BaseReconstructor):
     def __init__(self, db, logger):
-        query_builder = SlashingIncidentsQueryBuilder()
+        query_builder = SlashingEventsCacheQueryBuilder()
         column_names = query_builder.get_column_names()
 
         field_validator = FieldValidator()
@@ -25,9 +27,3 @@ class SlashingIncidentsReconstructor(BaseReconstructor):
         field_validator.add_string_field("transaction_hash", nullable=False)
 
         super().__init__(db, logger, query_builder, column_names, field_validator)
-
-    def fetch_state_for_operator(self, operator_id: str):
-        """Override to query analytics DB instead of events DB"""
-        fetch_query, params = self.query_builder.build_fetch_query(operator_id)
-        rows = self.db.execute_query(fetch_query, params, db="analytics")
-        return self.tuple_to_dict_transformer(self.column_names)(rows)

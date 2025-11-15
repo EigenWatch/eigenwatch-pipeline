@@ -8,7 +8,7 @@ SELECT
     status::TEXT,
     block_timestamp as status_changed_at,
     block_number as status_changed_block,
-    block_timestamp as period_start,
+    id as event_id,
     transaction_hash,
     NOW() as created_at,
     NOW() as updated_at
@@ -25,11 +25,11 @@ class AVSRelationshipHistoryQueryBuilder(BaseQueryBuilder):
         return """
 INSERT INTO operator_avs_registration_history (
     operator_id, avs_id, status, status_changed_at, status_changed_block,
-    period_start, transaction_hash, created_at, updated_at
+    event_id, transaction_hash, created_at, updated_at
 )
 VALUES (
     :operator_id, :avs_id, :status, :status_changed_at, :status_changed_block,
-    :period_start, :transaction_hash, :created_at, :updated_at
+    :event_id, :transaction_hash, :created_at, :updated_at
 )
 ON CONFLICT DO NOTHING
 """
@@ -44,7 +44,7 @@ ON CONFLICT DO NOTHING
             "status",
             "status_changed_at",
             "status_changed_block",
-            "period_start",
+            "event_id",
             "transaction_hash",
             "created_at",
             "updated_at",

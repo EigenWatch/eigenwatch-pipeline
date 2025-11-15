@@ -6,44 +6,61 @@ WITH current_status AS (
     SELECT DISTINCT ON (avs_id)
         avs_id,
         status,
-        status_changed_at as current_status_since
+        status_changed_at AS current_status_since
     FROM operator_avs_registration_history
     WHERE operator_id = :operator_id
     ORDER BY avs_id, status_changed_at DESC
 ),
+
+-- Stage 1: compute window (LEAD) BEFORE using aggregates
+registration_windows AS (
+    SELECT
+        avs_id,
+        status,
+        status_changed_at,
+        LEAD(status_changed_at) OVER (
+            PARTITION BY avs_id
+            ORDER BY status_changed_at
+        ) AS next_status_changed_at
+    FROM operator_avs_registration_history
+    WHERE operator_id = :operator_id
+),
+
+-- Stage 2: aggregate on precomputed window results
 registration_stats AS (
     SELECT
         avs_id,
-        MIN(CASE WHEN status = 'REGISTERED' THEN status_changed_at END) as first_registered_at,
-        MAX(CASE WHEN status = 'REGISTERED' THEN status_changed_at END) as last_registered_at,
-        MAX(CASE WHEN status = 'UNREGISTERED' THEN status_changed_at END) as last_unregistered_at,
-        COUNT(CASE WHEN status = 'REGISTERED' THEN 1 END) as total_registration_cycles,
+        MIN(CASE WHEN status = 'REGISTERED' THEN status_changed_at END) AS first_registered_at,
+        MAX(CASE WHEN status = 'REGISTERED' THEN status_changed_at END) AS last_registered_at,
+        MAX(CASE WHEN status = 'UNREGISTERED' THEN status_changed_at END) AS last_unregistered_at,
+        COUNT(CASE WHEN status = 'REGISTERED' THEN 1 END) AS total_registration_cycles,
+
         SUM(
-            CASE WHEN status = 'REGISTERED' THEN
-                EXTRACT(EPOCH FROM (
-                    COALESCE(
-                        LEAD(status_changed_at) OVER (PARTITION BY avs_id ORDER BY status_changed_at),
-                        NOW()
-                    ) - status_changed_at
-                )) / 86400
-            ELSE 0 END
-        )::INTEGER as total_days_registered
-    FROM operator_avs_registration_history
-    WHERE operator_id = :operator_id
+            CASE 
+                WHEN status = 'REGISTERED' THEN
+                    EXTRACT(EPOCH FROM (
+                        COALESCE(next_status_changed_at, NOW()) - status_changed_at
+                    )) / 86400
+                ELSE 0
+            END
+        )::INTEGER AS total_days_registered
+
+    FROM registration_windows
     GROUP BY avs_id
 )
+
 SELECT
-    :operator_id as operator_id,
+    :operator_id AS operator_id,
     cs.avs_id,
-    cs.status as current_status,
+    cs.status AS current_status,
     cs.current_status_since,
     rs.first_registered_at,
     rs.last_registered_at,
     rs.last_unregistered_at,
     rs.total_registration_cycles,
     rs.total_days_registered,
-    GREATEST(rs.last_registered_at, rs.last_unregistered_at) as last_activity_at,
-    NOW() as updated_at
+    GREATEST(rs.last_registered_at, rs.last_unregistered_at) AS last_activity_at,
+    NOW() AS updated_at
 FROM current_status cs
 LEFT JOIN registration_stats rs ON cs.avs_id = rs.avs_id
 """
