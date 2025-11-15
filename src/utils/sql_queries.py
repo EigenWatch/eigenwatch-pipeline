@@ -100,7 +100,7 @@ get_operators_since_last_run = """
     UNION
     SELECT operator_id FROM changed_via_encumbered_magnitude
     UNION
-    SELECT operator_id FROM changed_via_commission_avsfailedScript=vendor
+    SELECT operator_id FROM changed_via_commission_avs
     UNION
     SELECT operator_id FROM changed_via_commission_pi
     UNION

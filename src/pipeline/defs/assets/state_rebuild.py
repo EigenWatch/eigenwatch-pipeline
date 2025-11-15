@@ -7,87 +7,18 @@ from dagster import asset, OpExecutionContext, AssetIn
 from datetime import datetime, timezone
 from typing import Set
 
+from services.processors.process_operators import process_operators
+from services.reconstructors.allocation_state import AllocationReconstructor
+from services.reconstructors.strategy_state import StrategyStateReconstructor
+
 from ..resources import DatabaseResource, ConfigResource
 from services.state_reconstructor import (
-    StrategyStateReconstructor,
-    AllocationReconstructor,
     AVSRelationshipReconstructor,
     CommissionRateReconstructor,
     DelegatorReconstructor,
     SlashingReconstructor,
     CurrentStateAggregator,
 )
-
-
-def process_operators(
-    context: OpExecutionContext,
-    changed_operators: Set[str],
-    reconstructor,
-    log_prefix: str,
-    config: ConfigResource,
-) -> int:
-    """
-    Shared helper to process operators with a 2-step reconstructor:
-      1. fetch_state_for_operator → returns list/dict of state rows
-      2. insert_state_rows → inserts OR updates those rows
-
-    This structure is generic and reusable across all reconstructor types.
-    """
-    if not changed_operators:
-        context.log.info(f"No operators to process for {log_prefix}")
-        return 0
-
-    start_time = datetime.now(timezone.utc)
-    processed_count = 0
-    total_rows_fetched = 0
-    total_rows_inserted = 0
-
-    for idx, operator_id in enumerate(changed_operators, 1):
-        if idx % config.log_batch_progress_every == 0:
-            context.log.info(
-                f"{log_prefix} {idx}/{len(changed_operators)}: {operator_id}"
-            )
-
-        # --- STEP 1: Fetch reconstructed state ---
-        try:
-            state_rows = reconstructor.fetch_state_for_operator(operator_id)
-        except Exception as exc:
-            context.log.error(
-                f"{log_prefix}: Failed while fetching for {operator_id}: {exc}"
-            )
-            continue
-
-        rows_fetched = len(state_rows) if state_rows else 0
-        total_rows_fetched += rows_fetched
-
-        if rows_fetched == 0:
-            context.log.debug(f"{log_prefix}: No state rows for {operator_id}")
-            processed_count += 1
-            continue
-
-        # --- STEP 2: Insert / update state ---
-        try:
-            inserted_count = reconstructor.insert_state_rows(operator_id, state_rows)
-            total_rows_inserted += inserted_count
-        except Exception as exc:
-            context.log.error(
-                f"{log_prefix}: Failed while inserting for {operator_id}: {exc}"
-            )
-            continue
-
-        processed_count += 1
-
-    duration = (datetime.now(timezone.utc) - start_time).total_seconds()
-
-    context.log.info(
-        f"{log_prefix}: Processed {processed_count} operators, "
-        f"rows fetched: {total_rows_fetched}, "
-        f"rows inserted/updated: {total_rows_inserted}, "
-        f"duration: {duration:.2f}s"
-    )
-
-    return processed_count
-
 
 # -----------------------------
 # Operator state rebuild assets
