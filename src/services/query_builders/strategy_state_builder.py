@@ -77,3 +77,17 @@ class StrategyStateQueryBuilder(BaseQueryBuilder):
 
     def generate_id(self, row: dict) -> str:
         return f"{row['operator_id']}-{row['strategy_id']}"
+
+    def get_column_names(self) -> list:
+        return [
+            "operator_id",
+            "strategy_id",
+            "max_magnitude",
+            "max_magnitude_updated_at",
+            "max_magnitude_updated_block",
+            "encumbered_magnitude",
+            "encumbered_magnitude_updated_at",
+            "encumbered_magnitude_updated_block",
+            "utilization_rate",
+            "updated_at",
+        ]

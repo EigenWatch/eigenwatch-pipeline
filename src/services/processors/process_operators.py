@@ -1,20 +1,20 @@
 from datetime import datetime, timezone
-from typing import Set
-from dagster import OpExecutionContext
+from typing import Callable, Optional, List
+from services.reconstructors.base import BaseReconstructor
 from utils.debug_log import debug_print
 
 
 def process_operators(
-    context: OpExecutionContext,
-    changed_operators: Set[str],
-    reconstructor,
+    context,
+    changed_operators: set[str],
+    reconstructor: BaseReconstructor,
     log_prefix: str,
     config,
 ) -> int:
     """
-    Process operators in a unified way using any BaseReconstructor.
+    Unified operator processing.
+    Uses reconstructor's fetch/insert and optional row_transformer.
     """
-    debug_print(changed_operators)
     if not changed_operators:
         context.log.info(f"No operators to process for {log_prefix}")
         return 0
@@ -55,6 +55,5 @@ def process_operators(
         f"rows inserted/updated: {total_rows_inserted}, "
         f"duration: {duration:.2f}s"
     )
-    debug_print({"duration": duration, "processed_count": processed_count})
 
     return processed_count

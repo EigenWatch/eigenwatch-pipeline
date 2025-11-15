@@ -29,13 +29,6 @@ class PipelineCheckpoint(Base, TimestampMixin):
     run_metadata = Column(JSONB)
 
 
-class Operator(Base, TimestampMixin):
-    __tablename__ = "operators"
-
-    id = Column(String, primary_key=True)
-    address = Column(String, nullable=False, unique=True)
-
-
 class OperatorState(Base, TimestampMixin):
     __tablename__ = "operator_state"
 
@@ -722,12 +715,18 @@ class ConcentrationMetrics(Base):
 
 
 # MINIMAL FOREIGN KEY TABLES
+class Operator(Base, TimestampMixin):
+    __tablename__ = "operators"
+
+    id = Column(String, primary_key=True)
+    address = Column(String, nullable=False, unique=True)
+
+
 class AVS(Base, TimestampMixin):
     __tablename__ = "avs"
 
     id = Column(String, primary_key=True)
     address = Column(String, nullable=False, unique=True)
-    name = Column(String)
 
 
 class Staker(Base, TimestampMixin):
@@ -742,8 +741,6 @@ class Strategy(Base, TimestampMixin):
 
     id = Column(String, primary_key=True)
     address = Column(String, nullable=False, unique=True)
-    symbol = Column(String)
-    decimals = Column(Integer, default=18)
 
 
 class OperatorSet(Base, TimestampMixin):
