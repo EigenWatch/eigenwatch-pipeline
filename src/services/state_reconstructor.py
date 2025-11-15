@@ -4,8 +4,6 @@ State Reconstruction Services - SQL-first approach for rebuilding operator state
 """
 import logging
 from utils.sql_queries import (
-    strategy_state_reconstructor_query,
-    allocation_state_reconstructor_query,
     avs_relationship_reconstructor_history_query,
     avs_relationship_reconstructor_query,
     current_state_reconstructor_query,
@@ -16,61 +14,6 @@ from utils.sql_queries import (
     rebuild_slashing_amounts_query,
     rebuild_slashing_incidents_query,
 )
-
-
-class StrategyStateReconstructor:
-    """Rebuilds operator_strategy_state from max_magnitude and encumbered_magnitude events"""
-
-    def __init__(self, db, logger: logging.Logger):
-        self.db = db
-        self.logger = logger
-
-    def rebuild_for_operator(self, operator_id: str) -> int:
-        """
-        Rebuild strategy state for one operator.
-        Returns count of strategy records updated.
-        """
-
-        rowcount = self.db.execute_update(
-            strategy_state_reconstructor_query,
-            {"operator_id": operator_id},
-            db="analytics",
-        )
-
-        return rowcount
-
-
-class AllocationReconstructor:
-    """Rebuilds operator_allocations from allocation_events"""
-
-    def __init__(self, db, logger: logging.Logger):
-        self.db = db
-        self.logger = logger
-
-    def rebuild_for_operator(self, operator_id: str) -> int:
-        """
-        Rebuild allocations for one operator.
-        Determines is_active based on current block vs effect_block.
-        """
-        # Get current block number from latest event
-        current_block_query = """
-            SELECT MAX(block_number) as current_block
-            FROM (
-                SELECT block_number FROM allocation_events LIMIT 1
-                UNION ALL
-                SELECT block_number FROM operator_share_events LIMIT 1
-            ) latest
-        """
-        result = self.db.execute_query(current_block_query, db="events")
-        current_block = result[0][0] if result and result[0][0] else 0
-
-        rowcount = self.db.execute_update(
-            allocation_state_reconstructor_query,
-            {"operator_id": operator_id, "current_block": current_block},
-            db="analytics",
-        )
-
-        return rowcount
 
 
 class AVSRelationshipReconstructor:

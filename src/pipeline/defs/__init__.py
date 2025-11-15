@@ -5,8 +5,6 @@ from dagster import (
     AssetSelection,
 )
 
-import dagster as dg
-
 from .assets.extraction import (
     changed_operators_since_last_run,
 )
@@ -14,10 +12,16 @@ from .assets.extraction import (
 from .assets.state_rebuild import (
     operator_strategy_state_asset,
     operator_allocations_asset,
+    operator_avs_history_asset,
     operator_avs_relationships_asset,
-    operator_commission_rates_asset,
+    operator_commission_pi_asset,
+    operator_commission_avs_asset,
+    operator_commission_operator_set_asset,
+    operator_delegator_history_asset,
     operator_delegators_asset,
+    operator_delegator_shares_asset,
     operator_slashing_incidents_asset,
+    operator_slashing_amounts_asset,
     operator_current_state_asset,
 )
 
@@ -35,26 +39,19 @@ from .assets.analytics import (
 from .resources import DatabaseResource, ConfigResource
 
 
-# analytics_pipeline/__init__.py
-"""
-Operator Analytics Pipeline - Dagster Implementation
-
-Architecture:
-- Entity-centric processing (query changed operators via entity tables)
-- Full state reconstruction (not incremental)
-- SQL-first approach with bulk operations
-- Clear phase separation: Extract → Transform → Load → Analyze
-"""
-
-
-# Define asset groups
 state_rebuild_assets = [
     operator_strategy_state_asset,
     operator_allocations_asset,
+    operator_avs_history_asset,
     operator_avs_relationships_asset,
-    operator_commission_rates_asset,
+    operator_commission_pi_asset,
+    operator_commission_avs_asset,
+    operator_commission_operator_set_asset,
+    operator_delegator_history_asset,
     operator_delegators_asset,
+    operator_delegator_shares_asset,
     operator_slashing_incidents_asset,
+    operator_slashing_amounts_asset,
     operator_current_state_asset,
 ]
 
@@ -70,7 +67,6 @@ analytics_assets = [
 ]
 
 
-# Define jobs
 state_update_job = define_asset_job(
     name="operator_state_update",
     selection=AssetSelection.assets(changed_operators_since_last_run)
@@ -91,49 +87,31 @@ analytics_job = define_asset_job(
 )
 
 
-# Define schedules
 state_update_schedule = ScheduleDefinition(
     job=state_update_job,
-    cron_schedule="0 */6 * * *",  # Every 6 hours
+    cron_schedule="0 */6 * * *",
     description="Run state updates every 6 hours",
 )
 
 snapshot_schedule = ScheduleDefinition(
     job=snapshot_job,
-    cron_schedule="5 0 * * *",  # 00:05 UTC daily
+    cron_schedule="5 0 * * *",
     description="Create daily snapshots at midnight",
 )
 
 analytics_schedule = ScheduleDefinition(
     job=analytics_job,
-    cron_schedule="30 0 * * *",  # 00:30 UTC daily
+    cron_schedule="30 0 * * *",
     description="Run analytics calculations after snapshots",
 )
 
 
-# Define resources
 resources = {
     "db": DatabaseResource(),
     "config": ConfigResource(),
 }
 
 
-# @dg.definitions
-# def resources():
-#     return dg.Definitions(
-#         resources=resources,
-#         jobs=[
-#             state_update_job,
-#             snapshot_job,
-#             analytics_job,
-#         ],
-#         schedules=[
-#             state_update_schedule,
-#             snapshot_schedule,
-#             analytics_schedule,
-#         ],
-#     )
-# Definitions
 defs = Definitions(
     assets=[
         changed_operators_since_last_run,
