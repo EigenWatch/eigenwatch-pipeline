@@ -1,6 +1,7 @@
 # CORE OPERATOR TABLES
 from datetime import datetime
 from sqlalchemy import (
+    BigInteger,
     Column,
     Date,
     ForeignKey,
@@ -16,16 +17,40 @@ from sqlalchemy.dialects.postgresql import JSONB
 from .base import Base, TimestampMixin
 
 
+class PipelineCheckpoint(Base, TimestampMixin):
+    __tablename__ = "pipeline_checkpoints"
+
+    pipeline_name = Column(String(100), primary_key=True)
+    last_processed_at = Column(DateTime, nullable=False)
+    last_processed_block = Column(BigInteger)
+    operators_processed_count = Column(Integer)
+    total_events_processed = Column(Integer)
+    run_duration_seconds = Column(Integer)
+    run_metadata = Column(JSONB)
+
+
+class Operator(Base, TimestampMixin):
+    __tablename__ = "operators"
+
+    id = Column(String, primary_key=True)
+    address = Column(String, nullable=False, unique=True)
+
+
 class OperatorState(Base, TimestampMixin):
     __tablename__ = "operator_state"
 
     # Primary Key
-    operator_id = Column(String, primary_key=True, index=True)
+    operator_id = Column(
+        String,
+        ForeignKey("operators.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
 
     # Identity & Metadata
     operator_address = Column(String, nullable=False, unique=True)
     current_metadata_uri = Column(String)
-    metadata = Column(JSONB)  # {name, logo, website, description, twitter, etc.}
+    metadata_json = Column(JSONB)  # {name, logo, website, description, twitter, etc.}
     metadata_fetched_at = Column(DateTime)
 
     # Registration Info
@@ -186,7 +211,7 @@ class OperatorAllocation(Base, TimestampMixin):
 
     __table_args__ = (
         Index("idx_allocation_operator", "operator_id"),
-        Index("idx_allocation_operator_avs", "operator_id", "avs_id"),
+        Index("idx_allocation_operator_avs", "operator_id", "operator_set_id"),
         Index("idx_allocation_status", "is_active"),
         Index("idx_allocation_effect", "effect_block"),
     )
@@ -421,7 +446,7 @@ class OperatorSlashingIncident(Base, TimestampMixin):
 
     __table_args__ = (
         Index("idx_slash_operator_date", "operator_id", "slashed_at"),
-        Index("idx_slash_avs", "avs_id"),
+        Index("idx_slash_avs", "operator_set_id"),
     )
 
 
@@ -703,6 +728,13 @@ class AVS(Base, TimestampMixin):
     id = Column(String, primary_key=True)
     address = Column(String, nullable=False, unique=True)
     name = Column(String)
+
+
+class Staker(Base, TimestampMixin):
+    __tablename__ = "stakers"
+
+    id = Column(String, primary_key=True)
+    address = Column(String, nullable=False, unique=True)
 
 
 class Strategy(Base, TimestampMixin):
