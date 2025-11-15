@@ -172,7 +172,7 @@ class OperatorCommissionRate(Base, TimestampMixin):
 class OperatorAllocation(Base, TimestampMixin):
     __tablename__ = "operator_allocations"
 
-    id = Column(String, primary_key=True)  # operator_id-operator_set_id-strategy_id
+    id = Column(String, primary_key=True)
     operator_id = Column(
         String,
         ForeignKey("operators.id", ondelete="CASCADE"),
@@ -192,20 +192,14 @@ class OperatorAllocation(Base, TimestampMixin):
         index=True,
     )
 
-    # Allocation Details
     magnitude = Column(Numeric, nullable=False)
     effect_block = Column(Integer, nullable=False)
-
-    # Status
-    is_active = Column(Boolean, default=False, index=True)
     allocated_at = Column(DateTime, nullable=False)
     allocated_at_block = Column(Integer, nullable=False)
-    activated_at = Column(DateTime)
 
     __table_args__ = (
         Index("idx_allocation_operator", "operator_id"),
         Index("idx_allocation_operator_avs", "operator_id", "operator_set_id"),
-        Index("idx_allocation_status", "is_active"),
         Index("idx_allocation_effect", "effect_block"),
     )
 
