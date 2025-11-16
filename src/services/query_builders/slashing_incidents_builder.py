@@ -1,4 +1,5 @@
 # services/query_builders/slashing_incidents_builder.py
+from typing import Optional
 from .base_builder import BaseQueryBuilder
 
 slashing_incidents_query = """
@@ -17,10 +18,10 @@ WHERE operator_id = :operator_id
 
 
 class SlashingIncidentsQueryBuilder(BaseQueryBuilder):
-    def build_fetch_query(self, operator_id: str):
+    def build_fetch_query(self, operator_id: str, up_to_block: Optional[int] = None):
         return slashing_incidents_query, {"operator_id": operator_id}
 
-    def build_insert_query(self) -> str:
+    def build_insert_query(self, is_snapshot: bool = False) -> str:
         return """
 INSERT INTO operator_slashing_incidents (
     operator_id, operator_set_id, slashed_at, slashed_at_block,
@@ -33,7 +34,7 @@ VALUES (
 ON CONFLICT DO NOTHING
 """
 
-    def generate_id(self, row: dict) -> str:
+    def generate_id(self, row: dict, is_snapshot: bool = False) -> str:
         return (
             f"{row['operator_id']}-{row['slashed_at_block']}-{row['transaction_hash']}"
         )

@@ -1,3 +1,4 @@
+from typing import Optional
 from .base_builder import BaseQueryBuilder
 
 # Fetch query - remove avs_id from SELECT
@@ -43,13 +44,13 @@ ON CONFLICT (id) DO UPDATE SET
 
 
 class AllocationStateQueryBuilder(BaseQueryBuilder):
-    def build_fetch_query(self, operator_id: str):
+    def build_fetch_query(self, operator_id: str, up_to_block: Optional[int] = None):
         return allocation_state_fetch_query, {"operator_id": operator_id}
 
-    def build_insert_query(self) -> str:
+    def build_insert_query(self, is_snapshot: bool = False) -> str:
         return allocation_state_insert_query
 
-    def generate_id(self, row: dict) -> str:
+    def generate_id(self, row: dict, is_snapshot: bool = False) -> str:
         return f"{row['operator_id']}-{row['operator_set_id']}-{row['strategy_id']}"
 
     def get_column_names(self) -> list:

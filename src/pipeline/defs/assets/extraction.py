@@ -6,8 +6,12 @@ Extraction Assets - Identify operators with changes since last run
 from dagster import asset, OpExecutionContext
 from datetime import datetime, timezone
 from typing import Set
+
+from utils.operator_event_query import (
+    build_operator_event_query,
+    default_operator_event_tables,
+)
 from ..resources import DatabaseResource, ConfigResource
-from utils.sql_queries import get_operators_since_last_run
 
 from dagster import asset
 from typing import Set
@@ -46,8 +50,13 @@ def changed_operators_since_last_run(
         last_processed_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
         context.log.info("First pipeline run - processing all operators")
 
+    query = build_operator_event_query(
+        default_operator_event_tables,
+        cutoff_column="created_at",
+        cutoff_param=":last_processed_at",
+    )
     results = db.execute_query(
-        get_operators_since_last_run,
+        query,
         {"last_processed_at": last_processed_at},
         db="events",
     )

@@ -29,12 +29,20 @@ from .assets.state_rebuild import (
 from .assets.snapshots import (
     operator_daily_snapshots_asset,
     operator_strategy_daily_snapshots_asset,
+    operator_avs_relationship_snapshots_asset,
+    operator_delegator_shares_snapshots_asset,
+    operator_commission_rates_snapshots_asset,
+    operator_allocation_snapshots_asset,
+    network_daily_aggregates_asset,
 )
 
 from .assets.analytics import (
-    volatility_metrics_asset,
-    concentration_metrics_asset,
+    performance_scores_asset,
+    economic_scores_asset,
+    network_scores_asset,
     operator_analytics_asset,
+    concentration_metrics_asset,
+    volatility_metrics_asset,
 )
 
 from .resources import DatabaseResource, ConfigResource
@@ -60,11 +68,19 @@ state_rebuild_assets = [
 snapshot_assets = [
     operator_daily_snapshots_asset,
     operator_strategy_daily_snapshots_asset,
+    operator_avs_relationship_snapshots_asset,
+    operator_delegator_shares_snapshots_asset,
+    operator_commission_rates_snapshots_asset,
+    operator_allocation_snapshots_asset,
+    network_daily_aggregates_asset,
 ]
 
 analytics_assets = [
     volatility_metrics_asset,
     concentration_metrics_asset,
+    performance_scores_asset,
+    economic_scores_asset,
+    network_scores_asset,
     operator_analytics_asset,
 ]
 

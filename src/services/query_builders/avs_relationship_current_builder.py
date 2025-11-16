@@ -1,4 +1,5 @@
 # services/query_builders/avs_relationship_current_builder.py
+from typing import Optional
 from .base_builder import BaseQueryBuilder
 
 avs_relationship_current_query = """
@@ -67,10 +68,10 @@ LEFT JOIN registration_stats rs ON cs.avs_id = rs.avs_id
 
 
 class AVSRelationshipCurrentQueryBuilder(BaseQueryBuilder):
-    def build_fetch_query(self, operator_id: str):
+    def build_fetch_query(self, operator_id: str, up_to_block: Optional[int] = None):
         return avs_relationship_current_query, {"operator_id": operator_id}
 
-    def build_insert_query(self) -> str:
+    def build_insert_query(self, is_snapshot: bool = False) -> str:
         return """
 INSERT INTO operator_avs_relationships (
     id, operator_id, avs_id, current_status, current_status_since,
@@ -96,7 +97,7 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at = EXCLUDED.updated_at
 """
 
-    def generate_id(self, row: dict) -> str:
+    def generate_id(self, row: dict, is_snapshot: bool = False) -> str:
         return f"{row['operator_id']}-{row['avs_id']}"
 
     def get_column_names(self) -> list:
