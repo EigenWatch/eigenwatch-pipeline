@@ -265,6 +265,7 @@ class OperatorAVSRelationship(Base, TimestampMixin):
     last_registered_at = Column(DateTime)
     last_unregistered_at = Column(DateTime)
     total_registration_cycles = Column(Integer, default=0)  # Number of times registered
+    # TODO: Look into this to ensure it is calculated properly
     total_days_registered = Column(Integer, default=0)  # Cumulative days
 
     # Current Period (if registered)
@@ -548,6 +549,215 @@ class OperatorStrategyDailySnapshot(Base):
             name="operator_strategy_daily_snapshots_operator_strategy_date_key",
         ),
     )
+
+
+class OperatorAVSRelationshipSnapshot(Base):
+    """Daily snapshots of operator-AVS relationships"""
+
+    __tablename__ = "operator_avs_relationship_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    operator_id = Column(
+        String,
+        ForeignKey("operators.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    avs_id = Column(
+        String, ForeignKey("avs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    snapshot_date = Column(Date, nullable=False, index=True)
+    snapshot_block = Column(Integer, nullable=False)
+
+    # Snapshot of relationship state
+    current_status = Column(String, nullable=False)  # 'REGISTERED' or 'UNREGISTERED'
+    days_registered_to_date = Column(Integer, default=0)
+    current_period_days = Column(Integer, default=0)
+    total_registration_cycles = Column(Integer, default=0)
+    active_operator_set_count = Column(Integer, default=0)
+    avs_commission_bips = Column(Integer)
+
+    __table_args__ = (
+        Index("idx_avs_rel_snap_operator_date", "operator_id", "snapshot_date"),
+        Index("idx_avs_rel_snap_avs_date", "avs_id", "snapshot_date"),
+        Index("idx_avs_rel_snap_status", "current_status"),
+        UniqueConstraint(
+            "operator_id",
+            "avs_id",
+            "snapshot_date",
+            name="operator_avs_relationship_snapshots_unique",
+        ),
+    )
+
+
+class OperatorDelegatorSharesSnapshot(Base):
+    """Daily snapshots of delegator shares per operator-strategy"""
+
+    __tablename__ = "operator_delegator_shares_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    operator_id = Column(
+        String,
+        ForeignKey("operators.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    staker_id = Column(
+        String, ForeignKey("stakers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    strategy_id = Column(
+        String,
+        ForeignKey("strategies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    snapshot_date = Column(Date, nullable=False, index=True)
+    snapshot_block = Column(Integer, nullable=False)
+
+    # Snapshot of shares
+    shares = Column(Numeric, nullable=False, default=0)
+    is_delegated = Column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        Index(
+            "idx_delegator_shares_snap_operator_date", "operator_id", "snapshot_date"
+        ),
+        Index("idx_delegator_shares_snap_staker_date", "staker_id", "snapshot_date"),
+        Index(
+            "idx_delegator_shares_snap_strategy_date", "strategy_id", "snapshot_date"
+        ),
+        Index("idx_delegator_shares_snap_delegated", "is_delegated"),
+        UniqueConstraint(
+            "operator_id",
+            "staker_id",
+            "strategy_id",
+            "snapshot_date",
+            name="operator_delegator_shares_snapshots_unique",
+        ),
+    )
+
+
+class OperatorCommissionRatesSnapshot(Base):
+    """Daily snapshots of commission rates"""
+
+    __tablename__ = "operator_commission_rates_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    operator_id = Column(
+        String,
+        ForeignKey("operators.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    commission_type = Column(
+        String, nullable=False, index=True
+    )  # 'PI', 'AVS', 'OPERATOR_SET'
+    avs_id = Column(String, ForeignKey("avs.id", ondelete="SET NULL"))
+    operator_set_id = Column(
+        String, ForeignKey("operator_sets.id", ondelete="SET NULL")
+    )
+    snapshot_date = Column(Date, nullable=False, index=True)
+    snapshot_block = Column(Integer, nullable=False)
+
+    # Snapshot of commission
+    current_bips = Column(Integer, nullable=False)
+
+    __table_args__ = (
+        Index("idx_commission_snap_operator_date", "operator_id", "snapshot_date"),
+        Index("idx_commission_snap_type", "commission_type"),
+        Index("idx_commission_snap_avs", "avs_id", "snapshot_date"),
+        UniqueConstraint(
+            "operator_id",
+            "commission_type",
+            "snapshot_date",
+            # Note: Including NULLable columns in unique constraint
+            # This allows multiple NULL values but enforces uniqueness when not NULL
+            name="operator_commission_rates_snapshots_unique",
+        ),
+    )
+
+
+class OperatorAllocationSnapshot(Base):
+    """Daily snapshots of operator allocations per operator-set-strategy"""
+
+    __tablename__ = "operator_allocation_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    operator_id = Column(
+        String,
+        ForeignKey("operators.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    operator_set_id = Column(
+        String,
+        ForeignKey("operator_sets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    strategy_id = Column(
+        String,
+        ForeignKey("strategies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    snapshot_date = Column(Date, nullable=False, index=True)
+    snapshot_block = Column(Integer, nullable=False)
+
+    # Allocation magnitude at snapshot time
+    magnitude = Column(Numeric, nullable=False, default=0)
+
+    __table_args__ = (
+        Index("idx_allocation_snap_operator_date", "operator_id", "snapshot_date"),
+        Index(
+            "idx_allocation_snap_operator_set_date", "operator_set_id", "snapshot_date"
+        ),
+        Index("idx_allocation_snap_strategy_date", "strategy_id", "snapshot_date"),
+        UniqueConstraint(
+            "operator_id",
+            "operator_set_id",
+            "strategy_id",
+            "snapshot_date",
+            name="operator_allocation_snapshots_unique",
+        ),
+    )
+
+
+class NetworkDailyAggregates(Base):
+    """Daily network-wide aggregate statistics for percentile calculations"""
+
+    __tablename__ = "network_daily_aggregates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    snapshot_date = Column(Date, nullable=False, unique=True, index=True)
+    snapshot_block = Column(Integer, nullable=False)
+
+    # Operator counts
+    total_operators = Column(Integer, default=0)
+    active_operators = Column(Integer, default=0)
+
+    # TVS aggregates
+    total_tvs = Column(Numeric, default=0)
+    mean_tvs = Column(Numeric, default=0)
+    median_tvs = Column(Numeric, default=0)
+    p25_tvs = Column(Numeric, default=0)
+    p75_tvs = Column(Numeric, default=0)
+    p90_tvs = Column(Numeric, default=0)
+
+    # Delegator aggregates
+    total_delegators = Column(Integer, default=0)
+    mean_delegators_per_operator = Column(Numeric, default=0)
+    median_delegators_per_operator = Column(Numeric, default=0)
+
+    # AVS aggregates
+    mean_avs_per_operator = Column(Numeric, default=0)
+    median_avs_per_operator = Column(Numeric, default=0)
+
+    # Commission aggregates
+    mean_pi_commission_bips = Column(Numeric, default=0)
+    median_pi_commission_bips = Column(Numeric, default=0)
+
+    __table_args__ = (Index("idx_network_agg_date", "snapshot_date"),)
 
 
 class OperatorCommissionHistory(Base):
