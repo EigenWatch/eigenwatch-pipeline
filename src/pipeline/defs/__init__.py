@@ -37,9 +37,12 @@ from .assets.snapshots import (
 )
 
 from .assets.analytics import (
-    volatility_metrics_asset,
-    concentration_metrics_asset,
+    performance_scores_asset,
+    economic_scores_asset,
+    network_scores_asset,
     operator_analytics_asset,
+    concentration_metrics_asset,
+    volatility_metrics_asset,
 )
 
 from .resources import DatabaseResource, ConfigResource
@@ -75,6 +78,9 @@ snapshot_assets = [
 analytics_assets = [
     volatility_metrics_asset,
     concentration_metrics_asset,
+    performance_scores_asset,
+    economic_scores_asset,
+    network_scores_asset,
     operator_analytics_asset,
 ]
 

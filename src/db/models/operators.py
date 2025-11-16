@@ -839,9 +839,7 @@ class OperatorAnalytics(Base):
 
     # Operational Metrics
     slashing_event_count = Column(Integer, default=0)
-    lifetime_slashing_amount = Column(
-        Numeric, default=0
-    )  # TODO: Review this. If diffrent strategies are slashed this calculation might be flawed
+    lifetime_slashing_amount = Column(Numeric, default=0)
     operational_days = Column(Integer)
 
     # Status Flags
@@ -854,7 +852,9 @@ class OperatorAnalytics(Base):
 
     __table_args__ = (
         Index("idx_operator_analytics_date_risk", "date", "risk_score"),
-        Index("idx_operator_analytics_operator_date", "operator_id", "date"),
+        UniqueConstraint(
+            "operator_id", "date", name="uq_operator_analytics_operator_date"
+        ),
     )
 
 
