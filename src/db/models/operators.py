@@ -44,14 +44,12 @@ class OperatorState(Base, TimestampMixin):
     # Identity & Metadata
     operator_address = Column(String, nullable=False, unique=True)
     current_metadata_uri = Column(String)
-    metadata_json = Column(JSONB)  # {name, logo, website, description, twitter, etc.}
-    metadata_fetched_at = Column(DateTime)
 
     # Registration Info
     registered_at = Column(DateTime)  # From operator_registered_events (if available)
     registration_block = Column(Integer)
-    first_activity_at = Column(DateTime, nullable=False)  # Fallback: earliest event
-    first_activity_block = Column(Integer, nullable=False)
+    first_activity_at = Column(DateTime, nullable=True)  # Fallback: earliest event
+    first_activity_block = Column(Integer, nullable=True)
     first_activity_type = Column(String)  # "REGISTRATION", "ALLOCATION", etc.
 
     # Delegation Configuration
@@ -472,6 +470,115 @@ class OperatorSlashingAmount(Base, TimestampMixin):
     )
 
 
+class OperatorRegistration(Base, TimestampMixin):
+    """Current operator registration information"""
+
+    __tablename__ = "operator_registration"
+
+    operator_id = Column(
+        String,
+        ForeignKey("operators.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+
+    # Registration details
+    registered_at = Column(DateTime, nullable=False)
+    registration_block = Column(Integer, nullable=False)
+    delegation_approver = Column(String, nullable=False)
+
+    # Event reference
+    transaction_hash = Column(String, nullable=False)
+
+    __table_args__ = (
+        Index("idx_operator_registration_date", "registered_at"),
+        Index("idx_operator_registration_block", "registration_block"),
+    )
+
+
+class OperatorDelegationApproverHistory(Base, TimestampMixin):
+    """History of delegation approver changes"""
+
+    __tablename__ = "operator_delegation_approver_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    operator_id = Column(
+        String,
+        ForeignKey("operators.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # Change details
+    old_delegation_approver = Column(String)  # NULL for first registration
+    new_delegation_approver = Column(String, nullable=False)
+    changed_at = Column(DateTime, nullable=False, index=True)
+    changed_at_block = Column(Integer, nullable=False)
+
+    # Event reference
+    transaction_hash = Column(String, nullable=False)
+
+    __table_args__ = (
+        Index("idx_delegation_approver_hist_operator", "operator_id", "changed_at"),
+    )
+
+
+class OperatorMetadata(Base, TimestampMixin):
+    """Current operator metadata"""
+
+    __tablename__ = "operator_metadata"
+
+    operator_id = Column(
+        String,
+        ForeignKey("operators.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+
+    # Current metadata
+    metadata_uri = Column(String, nullable=False)
+    metadata_json = Column(JSONB)  # Fetched metadata content
+    metadata_fetched_at = Column(DateTime)
+
+    # Update tracking
+    last_updated_at = Column(DateTime, nullable=False)
+    last_updated_block = Column(Integer, nullable=False)
+    total_updates = Column(Integer, default=1)
+
+    __table_args__ = (Index("idx_operator_metadata_updated", "last_updated_at"),)
+
+
+class OperatorMetadataHistory(Base, TimestampMixin):
+    """History of metadata updates"""
+
+    __tablename__ = "operator_metadata_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    operator_id = Column(
+        String,
+        ForeignKey("operators.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # Metadata details
+    metadata_uri = Column(String, nullable=False)
+    metadata_json = Column(JSONB)  # Snapshot of fetched metadata at this time
+    metadata_fetched_at = Column(DateTime)
+
+    # Update details
+    updated_at = Column(DateTime, nullable=False, index=True)
+    updated_at_block = Column(Integer, nullable=False)
+
+    # Event reference
+    transaction_hash = Column(String, nullable=False)
+
+    __table_args__ = (
+        Index("idx_metadata_history_operator", "operator_id", "updated_at"),
+        Index("idx_metadata_history_block", "updated_at_block"),
+    )
+
+
 # TIME-SERIES TABLES
 class OperatorDailySnapshot(Base):
     __tablename__ = "operator_daily_snapshots"
@@ -789,7 +896,7 @@ class OperatorCommissionHistory(Base):
     activation_delay_seconds = Column(Integer)
 
     # Event Context
-    event_id = Column(Integer)
+    event_id = Column(String)
     caller = Column(String)
     block_number = Column(Integer)
 

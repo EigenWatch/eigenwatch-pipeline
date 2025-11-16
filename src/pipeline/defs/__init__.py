@@ -24,6 +24,12 @@ from .assets.state_rebuild import (
     operator_slashing_incidents_asset,
     operator_slashing_amounts_asset,
     operator_current_state_asset,
+    operator_commission_history_asset,
+    operator_registration_asset,
+    operator_metadata_asset,
+    operator_metadata_history_asset,
+    operator_avs_allocation_summary_asset,
+    operator_delegation_approver_history_asset,
 )
 
 from .assets.snapshots import (
@@ -63,6 +69,12 @@ state_rebuild_assets = [
     operator_slashing_incidents_asset,
     operator_slashing_amounts_asset,
     operator_current_state_asset,
+    operator_commission_history_asset,
+    operator_registration_asset,
+    operator_metadata_asset,
+    operator_metadata_history_asset,
+    operator_avs_allocation_summary_asset,
+    operator_delegation_approver_history_asset,
 ]
 
 snapshot_assets = [

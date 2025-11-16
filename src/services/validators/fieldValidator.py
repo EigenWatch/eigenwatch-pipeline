@@ -97,30 +97,32 @@ class ForeignKeyHandler:
     ) -> bool:
         """
         Create an operator_set entity.
-        Requires avs_id and operator_set_id in context.
+        operator_set_id format: "0xabc123...-0" (avs_address-set_number)
         """
-        operator_set_number = context.get("operator_set_number")
-        avs_id = operator_set_id.split("-")[0]  # Extract from "0xaddress-0"
 
-        # Validate required fields
-        if not avs_id:
-            self.logger.warning(
-                f"Cannot create operator_set {operator_set_id}: missing avs_id in context"
-            )
-            return False
-
-        if operator_set_number is None:
-            self.logger.warning(
-                f"Cannot create operator_set {operator_set_id}: missing operator_set_number in context"
-            )
-            return False
-
-        # Extract integer from operator_set_id (format: "0xaddress-0")
+        # Parse operator_set_id to extract avs_id and set_number
         try:
-            set_number = int(operator_set_id.split("-")[-1])
-        except (ValueError, IndexError):
+            parts = operator_set_id.split("-")
+            if len(parts) != 2:
+                self.logger.error(
+                    f"Invalid operator_set_id format '{operator_set_id}'. "
+                    f"Expected format: 'avs_address-set_number'"
+                )
+                return False
+
+            avs_id = parts[0]
+            set_number = int(parts[1])
+
+            # Validate avs_id looks like an Ethereum address
+            if not avs_id.startswith("0x") or len(avs_id) != 42:
+                self.logger.warning(
+                    f"AVS ID '{avs_id}' doesn't look like a valid Ethereum address"
+                )
+                # Continue anyway - the database constraint will catch it if invalid
+
+        except (ValueError, IndexError) as e:
             self.logger.error(
-                f"Cannot parse operator_set_number from {operator_set_id}"
+                f"Failed to parse operator_set_id '{operator_set_id}': {e}"
             )
             return False
 
@@ -144,19 +146,16 @@ class ForeignKeyHandler:
                 {
                     "id": operator_set_id,
                     "avs_id": avs_id,
-                    "operator_set_id": set_number,  # Use extracted integer
+                    "operator_set_id": set_number,  # Store as integer
                 },
                 db="analytics",
             )
             self._existence_cache["operator_sets"].add(operator_set_id)
             self.logger.debug(
-                f"Created operator_set {operator_set_id} (avs: {avs_id}, set_id: {set_number})"
+                f"Created operator_set {operator_set_id} "
+                f"(avs: {avs_id}, set_number: {set_number})"
             )
             return True
-
-        except Exception as exc:
-            self.logger.error(f"Failed to create operator_set {operator_set_id}: {exc}")
-            return False
 
         except Exception as exc:
             self.logger.error(f"Failed to create operator_set {operator_set_id}: {exc}")
