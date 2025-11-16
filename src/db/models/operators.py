@@ -472,8 +472,6 @@ class OperatorSlashingAmount(Base, TimestampMixin):
 
 
 # TIME-SERIES TABLES
-
-
 class OperatorDailySnapshot(Base):
     __tablename__ = "operator_daily_snapshots"
 
@@ -505,6 +503,11 @@ class OperatorDailySnapshot(Base):
     __table_args__ = (
         Index("idx_snapshot_operator_date", "operator_id", "snapshot_date"),
         Index("idx_snapshot_date", "snapshot_date"),
+        UniqueConstraint(
+            "operator_id",
+            "snapshot_date",
+            name="operator_daily_snapshots_operator_date_key",
+        ),
     )
 
 
@@ -538,6 +541,12 @@ class OperatorStrategyDailySnapshot(Base):
         Index("idx_strategy_snapshot_operator_date", "operator_id", "snapshot_date"),
         Index("idx_strategy_snapshot_strategy_date", "strategy_id", "snapshot_date"),
         Index("idx_strategy_snapshot_magnitude", "max_magnitude"),
+        UniqueConstraint(
+            "operator_id",
+            "strategy_id",
+            "snapshot_date",
+            name="operator_strategy_daily_snapshots_operator_strategy_date_key",
+        ),
     )
 
 

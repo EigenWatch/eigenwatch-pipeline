@@ -13,7 +13,7 @@ daily_partitions = DailyPartitionsDefinition(start_date="2024-01-01")
 
 @asset(
     partitions_def=daily_partitions,
-    description="Creates daily snapshots of operator_current_state",
+    description="Creates daily snapshots of operator_state",
     compute_kind="sql",
 )
 def operator_daily_snapshots_asset(
@@ -29,13 +29,13 @@ def operator_daily_snapshots_asset(
     snapshot_date = datetime.strptime(partition_date_str, "%Y-%m-%d").date()
 
     # Check if we should create snapshot (only after snapshot hour)
-    current_hour = datetime.now(timezone.utc).hour
-    if current_hour < config.snapshot_hour_utc:
-        context.log.info(
-            f"Skipping snapshot creation - current hour {current_hour} "
-            f"< snapshot hour {config.snapshot_hour_utc}"
-        )
-        return Output(0, metadata={"skipped": True})
+    # current_hour = datetime.now(timezone.utc).hour
+    # if current_hour < config.snapshot_hour_utc:
+    #     context.log.info(
+    #         f"Skipping snapshot creation - current hour {current_hour} "
+    #         f"< snapshot hour {config.snapshot_hour_utc}"
+    #     )
+    #     return Output(0, metadata={"skipped": True})
 
     context.log.info(f"Creating snapshot for {snapshot_date}")
 
@@ -52,7 +52,7 @@ def operator_daily_snapshots_asset(
                 total_slash_events as slash_event_count_to_date,
                 operational_days,
                 is_active
-            FROM operator_current_state
+            FROM operator_state
         )
         INSERT INTO operator_daily_snapshots (
             operator_id, snapshot_date, snapshot_block,
@@ -115,12 +115,12 @@ def operator_strategy_daily_snapshots_asset(
             0 as snapshot_block,
             max_magnitude,
             encumbered_magnitude,
-            utilization_rate,
+            utilization_rate
         FROM operator_strategy_state
         ON CONFLICT (operator_id, strategy_id, snapshot_date) DO UPDATE SET
             max_magnitude = EXCLUDED.max_magnitude,
             encumbered_magnitude = EXCLUDED.encumbered_magnitude,
-            utilization_rate = EXCLUDED.utilization_rate,
+            utilization_rate = EXCLUDED.utilization_rate
     """
 
     rowcount = db.execute_update(
