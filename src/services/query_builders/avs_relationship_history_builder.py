@@ -1,4 +1,5 @@
 # services/query_builders/avs_relationship_history_builder.py
+from typing import Optional
 from .base_builder import BaseQueryBuilder
 
 avs_relationship_history_query = """
@@ -18,10 +19,10 @@ WHERE operator_id = :operator_id
 
 
 class AVSRelationshipHistoryQueryBuilder(BaseQueryBuilder):
-    def build_fetch_query(self, operator_id: str):
+    def build_fetch_query(self, operator_id: str, up_to_block: Optional[int] = None):
         return avs_relationship_history_query, {"operator_id": operator_id}
 
-    def build_insert_query(self) -> str:
+    def build_insert_query(self, is_snapshot: bool = False) -> str:
         return """
 INSERT INTO operator_avs_registration_history (
     operator_id, avs_id, status, status_changed_at, status_changed_block,
@@ -34,7 +35,7 @@ VALUES (
 ON CONFLICT DO NOTHING
 """
 
-    def generate_id(self, row: dict) -> str:
+    def generate_id(self, row: dict, is_snapshot: bool = False) -> str:
         return f"{row['operator_id']}-{row['avs_id']}-{row['status_changed_block']}"
 
     def get_column_names(self) -> list:

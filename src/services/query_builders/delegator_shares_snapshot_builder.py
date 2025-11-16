@@ -13,6 +13,9 @@ class DelegatorSharesSnapshotQueryBuilder(BaseQueryBuilder):
         """
         Get latest shares for each delegator-strategy combination up to a specific block.
         NOW INCLUDES is_delegated status.
+
+        NOTE: This fetches from EVENTS DB only. The is_delegated field must be
+        populated by fetching delegation status separately.
         """
 
         block_filter = ""
@@ -22,40 +25,50 @@ class DelegatorSharesSnapshotQueryBuilder(BaseQueryBuilder):
             block_filter = "AND block_number <= :up_to_block"
             params["up_to_block"] = up_to_block
 
+        # ONLY fetch from operator_share_events (events DB)
         query = f"""
-        WITH active_delegators AS (
-            -- Get delegators and their delegation status as of the block
-            SELECT DISTINCT ON (staker_id)
-                staker_id,
-                is_delegated
-            FROM operator_delegator_history
-            WHERE operator_id = :operator_id
-            {block_filter.replace('block_number', 'event_block') if block_filter else ''}
-            ORDER BY staker_id, event_block DESC, id DESC
-        ),
-        latest_shares AS (
-            SELECT DISTINCT ON (staker_id, strategy_id)
-                staker_id,
-                strategy_id,
-                shares
-            FROM operator_delegator_shares_events
-            WHERE operator_id = :operator_id
-            {block_filter}
-            ORDER BY staker_id, strategy_id, block_number DESC, log_index DESC
-        )
-        SELECT
+        SELECT DISTINCT ON (staker_id, strategy_id)
             :operator_id as operator_id,
-            ls.staker_id,
-            ls.strategy_id,
-            COALESCE(ls.shares, 0) as shares,
-            ad.is_delegated
-        FROM latest_shares ls
-        INNER JOIN active_delegators ad 
-            ON ls.staker_id = ad.staker_id
-        WHERE ls.shares > 0
+            staker_id as staker_id,
+            strategy_id as strategy_id,
+            shares
+        FROM operator_share_events
+        WHERE operator_id = :operator_id
+        {block_filter}
+        ORDER BY staker_id, strategy_id, block_number DESC, log_index DESC
         """
 
         return query, params
+
+    def fetch_delegation_status(
+        self, db, operator_id: str, up_to_block: Optional[int] = None
+    ) -> Dict[str, bool]:
+        """
+        Separate method to fetch delegation status from events DB.
+        Returns dict mapping staker_id -> is_delegated.
+        """
+        block_filter = ""
+        params = {"operator_id": operator_id}
+
+        if up_to_block is not None:
+            block_filter = "AND block_number <= :up_to_block"
+            params["up_to_block"] = up_to_block
+
+        query = f"""
+        SELECT DISTINCT ON (staker_id)
+            staker_id as staker_id,
+            CASE 
+                WHEN delegation_type = 'DELEGATED' THEN TRUE
+                ELSE FALSE
+            END as is_delegated
+        FROM staker_delegation_events
+        WHERE operator_id = :operator_id
+        {block_filter}
+        ORDER BY staker_id, block_number DESC, log_index DESC
+        """
+
+        result = db.execute_query(query, params, db="events")
+        return {row[0]: row[1] for row in result}
 
     def build_insert_query(self, is_snapshot: bool = False) -> str:
         """Only used for snapshots"""
@@ -87,5 +100,4 @@ class DelegatorSharesSnapshotQueryBuilder(BaseQueryBuilder):
             "staker_id",
             "strategy_id",
             "shares",
-            "is_delegated",
         ]

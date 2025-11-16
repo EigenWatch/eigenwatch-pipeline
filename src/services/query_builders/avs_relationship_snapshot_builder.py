@@ -11,68 +11,64 @@ class AVSRelationshipSnapshotQueryBuilder(BaseQueryBuilder):
         self, operator_id: str, up_to_block: Optional[int] = None
     ) -> Tuple[str, Dict]:
         """
-        Reconstruct AVS relationship state from history up to a specific block.
-        This finds the latest status for each AVS as of the block.
+        Reconstruct AVS relationship state from EVENTS DB up to a specific block.
+        Uses operator_avs_registration_status_updated_events.
         """
 
         block_filter = ""
         params = {"operator_id": operator_id}
 
         if up_to_block is not None:
-            block_filter = "AND status_changed_block <= :up_to_block"
+            block_filter = "AND block_number <= :up_to_block"
             params["up_to_block"] = up_to_block
 
         query = f"""
         WITH latest_status AS (
             SELECT DISTINCT ON (avs_id)
-                avs_id,
+                avs_id AS avs_id,
                 status AS current_status,
-                status_changed_at,
-                status_changed_block
-            FROM operator_avs_registration_history
+                to_timestamp(block_timestamp) AS status_changed_at,
+                block_number AS status_changed_block
+            FROM operator_avs_registration_status_updated_events
             WHERE operator_id = :operator_id
             {block_filter}
-            ORDER BY avs_id, status_changed_block DESC, id DESC
+            ORDER BY avs_id, block_number DESC, log_index DESC
         ),
 
-        -- registration_cycles unchanged (counts + first/last registered timestamps)
         registration_cycles AS (
             SELECT 
-                avs_id,
+                avs_id AS avs_id,
                 COUNT(*) FILTER (WHERE status = 'REGISTERED') AS total_registration_cycles,
-                MIN(status_changed_at) FILTER (WHERE status = 'REGISTERED') AS first_registered_at,
-                MAX(status_changed_at) FILTER (WHERE status = 'REGISTERED') AS last_registered_at
-            FROM operator_avs_registration_history
+                MIN(to_timestamp(block_timestamp)) FILTER (WHERE status = 'REGISTERED') AS first_registered_at,
+                MAX(to_timestamp(block_timestamp)) FILTER (WHERE status = 'REGISTERED') AS last_registered_at
+            FROM operator_avs_registration_status_updated_events
             WHERE operator_id = :operator_id
             {block_filter}
             GROUP BY avs_id
         ),
 
-        -- For each REGISTERED event, find the next non-REGISTERED status_changed_at for the same (operator_id, avs_id).
-        -- If none exists, treat the interval as open until NOW().
         registration_intervals AS (
             SELECT
-                h.avs_id,
-                h.status_changed_at AS start_time,
+                h.avs_id AS avs_id,
+                to_timestamp(h.block_timestamp) AS start_time,
                 COALESCE(
                     (
-                        SELECT MIN(h2.status_changed_at)
-                        FROM operator_avs_registration_history h2
+                        SELECT MIN(to_timestamp(h2.block_timestamp))
+                        FROM operator_avs_registration_status_updated_events h2
                         WHERE h2.operator_id = h.operator_id
                         AND h2.avs_id = h.avs_id
-                        AND h2.status_changed_at > h.status_changed_at
-                        AND h2.status <> 'REGISTERED'
-                        {block_filter} -- apply same block_filter to the lookups if present
+                        AND h2.block_timestamp > h.block_timestamp
+                        AND h2.status != 'REGISTERED'
+                        {block_filter.replace('block_number', 'h2.block_number') if block_filter else ''}
                     ),
                     NOW()
                 ) AS end_time
-            FROM operator_avs_registration_history h
+            FROM operator_avs_registration_status_updated_events h
             WHERE h.operator_id = :operator_id
             AND h.status = 'REGISTERED'
             {block_filter}
         ),
 
-        -- Guard against bad data where end < start
         normalized_intervals AS (
             SELECT
                 avs_id,
@@ -81,7 +77,6 @@ class AVSRelationshipSnapshotQueryBuilder(BaseQueryBuilder):
             FROM registration_intervals
         ),
 
-        -- Sort intervals to prepare merging
         sorted_intervals AS (
             SELECT 
                 avs_id,
@@ -91,7 +86,6 @@ class AVSRelationshipSnapshotQueryBuilder(BaseQueryBuilder):
             FROM normalized_intervals
         ),
 
-        -- Mark boundaries where a new island starts (start_time > prev_end)
         marked_intervals AS (
             SELECT
                 avs_id,
@@ -101,7 +95,6 @@ class AVSRelationshipSnapshotQueryBuilder(BaseQueryBuilder):
             FROM sorted_intervals
         ),
 
-        -- Assign group numbers (islands) by cumulative sum of is_new_group
         grouped_intervals AS (
             SELECT
                 avs_id,
@@ -111,46 +104,21 @@ class AVSRelationshipSnapshotQueryBuilder(BaseQueryBuilder):
             FROM marked_intervals
         ),
 
-        -- Merge intervals in each group (min start, max end)
         merged_intervals AS (
             SELECT
                 avs_id,
                 MIN(start_time) AS merged_start,
-                MAX(end_time)   AS merged_end
+                MAX(end_time) AS merged_end
             FROM grouped_intervals
             GROUP BY avs_id, grp
         ),
 
-        -- Sum merged intervals per AVS to get total active seconds, then convert to days
         registration_summary AS (
             SELECT
                 avs_id,
                 (SUM(EXTRACT(EPOCH FROM (merged_end - merged_start))) / 86400.0)::NUMERIC AS days_registered_to_date
             FROM merged_intervals
             GROUP BY avs_id
-        ),
-
-        -- operator set counts (unchanged)
-        operator_set_counts AS (
-            SELECT 
-                os.avs_id,
-                COUNT(DISTINCT oa.operator_set_id) AS active_operator_set_count
-            FROM operator_allocations oa
-            JOIN operator_sets os ON oa.operator_set_id = os.id
-            WHERE oa.operator_id = :operator_id
-            {block_filter.replace('status_changed_block', 'oa.allocated_at_block') if block_filter else ''}
-            GROUP BY os.avs_id
-        ),
-
-        -- commission rates (unchanged)
-        commission_rates AS (
-            SELECT DISTINCT ON (avs_id)
-                avs_id,
-                current_bips AS avs_commission_bips
-            FROM operator_commission_rates
-            WHERE operator_id = :operator_id
-            AND commission_type = 'AVS'
-            ORDER BY avs_id, current_activated_at DESC
         )
 
         SELECT
@@ -163,18 +131,67 @@ class AVSRelationshipSnapshotQueryBuilder(BaseQueryBuilder):
                     THEN (EXTRACT(EPOCH FROM (NOW() - ls.status_changed_at)) / 86400.0)::NUMERIC
                 ELSE 0
             END AS current_period_days,
-            COALESCE(rc.total_registration_cycles, 0) AS total_registration_cycles,
-            COALESCE(osc.active_operator_set_count, 0) AS active_operator_set_count,
-            cr.avs_commission_bips
+            COALESCE(rc.total_registration_cycles, 0) AS total_registration_cycles
         FROM latest_status ls
         LEFT JOIN registration_cycles rc ON ls.avs_id = rc.avs_id
         LEFT JOIN registration_summary rs ON ls.avs_id = rs.avs_id
-        LEFT JOIN operator_set_counts osc ON ls.avs_id = osc.avs_id
-        LEFT JOIN commission_rates cr ON ls.avs_id = cr.avs_id
-        WHERE ls.current_status IS NOT NULL;
+        WHERE ls.current_status IS NOT NULL
         """
 
         return query, params
+
+    def fetch_analytics_metrics(
+        self, db, operator_id: str, up_to_block: Optional[int] = None
+    ) -> Dict[str, Dict]:
+        """
+        Fetch operator set counts and commission rates from ANALYTICS DB.
+        Returns dict mapping avs_id -> {active_operator_set_count, avs_commission_bips}
+        """
+        block_filter = ""
+        params = {"operator_id": operator_id}
+
+        if up_to_block is not None:
+            block_filter = "AND oa.allocated_at_block <= :up_to_block"
+            params["up_to_block"] = up_to_block
+
+        query = f"""
+        WITH operator_set_counts AS (
+            SELECT 
+                os.avs_id,
+                COUNT(DISTINCT oa.operator_set_id) AS active_operator_set_count
+            FROM operator_allocations oa
+            JOIN operator_sets os ON oa.operator_set_id = os.id
+            WHERE oa.operator_id = :operator_id
+            {block_filter}
+            GROUP BY os.avs_id
+        ),
+        commission_rates AS (
+            SELECT DISTINCT ON (avs_id)
+                avs_id,
+                current_bips AS avs_commission_bips
+            FROM operator_commission_rates
+            WHERE operator_id = :operator_id
+            AND commission_type = 'AVS'
+            ORDER BY avs_id, current_activated_at DESC
+        )
+        SELECT
+            COALESCE(osc.avs_id, cr.avs_id) AS avs_id,
+            COALESCE(osc.active_operator_set_count, 0) AS active_operator_set_count,
+            cr.avs_commission_bips
+        FROM operator_set_counts osc
+        FULL OUTER JOIN commission_rates cr ON osc.avs_id = cr.avs_id
+        """
+
+        result = db.execute_query(query, params, db="analytics")
+
+        # Return as dict keyed by avs_id
+        metrics = {}
+        for row in result:
+            metrics[row[0]] = {
+                "active_operator_set_count": row[1],
+                "avs_commission_bips": row[2],
+            }
+        return metrics
 
     def build_insert_query(self, is_snapshot: bool = False) -> str:
         """Only used for snapshots"""
@@ -214,6 +231,4 @@ class AVSRelationshipSnapshotQueryBuilder(BaseQueryBuilder):
             "days_registered_to_date",
             "current_period_days",
             "total_registration_cycles",
-            "active_operator_set_count",
-            "avs_commission_bips",
         ]

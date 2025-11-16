@@ -12,6 +12,7 @@ class CommissionRatesSnapshotQueryBuilder(BaseQueryBuilder):
     ) -> Tuple[str, Dict]:
         """
         Get latest commission rates for all types (PI, AVS, OPERATOR_SET) up to a block.
+        Fetches from EVENTS DB only.
         """
 
         block_filter = ""
@@ -28,9 +29,8 @@ class CommissionRatesSnapshotQueryBuilder(BaseQueryBuilder):
                 'PI' as commission_type,
                 NULL::text as avs_id,
                 NULL::text as operator_set_id,
-                new_bips as current_bips,
-                block_number
-            FROM operator_pi_commission_bips_set_events
+                new_operator_pi_split_bips as current_bips
+            FROM operator_pi_split_bips_set_events
             WHERE operator_id = :operator_id
             {block_filter}
             ORDER BY operator_id, block_number DESC, log_index DESC
@@ -41,9 +41,8 @@ class CommissionRatesSnapshotQueryBuilder(BaseQueryBuilder):
                 'AVS' as commission_type,
                 avs_id,
                 NULL::text as operator_set_id,
-                new_bips as current_bips,
-                block_number
-            FROM operator_avs_commission_bips_set_events
+                new_operator_avs_split_bips as current_bips
+            FROM operator_avs_split_bips_set_events
             WHERE operator_id = :operator_id
             {block_filter}
             ORDER BY avs_id, block_number DESC, log_index DESC
@@ -54,9 +53,8 @@ class CommissionRatesSnapshotQueryBuilder(BaseQueryBuilder):
                 'OPERATOR_SET' as commission_type,
                 NULL::text as avs_id,
                 operator_set_id,
-                new_bips as current_bips,
-                block_number
-            FROM operator_operator_set_commission_bips_set_events
+                new_operator_set_split_bips as current_bips
+            FROM operator_set_split_bips_set_events
             WHERE operator_id = :operator_id
             {block_filter}
             ORDER BY operator_set_id, block_number DESC, log_index DESC

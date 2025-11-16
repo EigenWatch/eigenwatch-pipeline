@@ -1,7 +1,5 @@
 from datetime import datetime, timezone
-from typing import Callable, Optional, List
 from services.reconstructors.base import BaseReconstructor
-from utils.debug_log import debug_print
 
 
 def process_operators(
@@ -32,7 +30,6 @@ def process_operators(
 
         try:
             rows = reconstructor.fetch_state_for_operator(operator_id)
-            debug_print(rows)
         except Exception as exc:
             context.log.error(f"{log_prefix}: fetch failed for {operator_id}: {exc}")
             continue

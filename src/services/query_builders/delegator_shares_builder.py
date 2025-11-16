@@ -1,4 +1,5 @@
 # services/query_builders/delegator_shares_builder.py
+from typing import Optional
 from .base_builder import BaseQueryBuilder
 
 delegator_shares_query = """
@@ -53,10 +54,10 @@ FROM cumulative_shares
 
 
 class DelegatorSharesQueryBuilder(BaseQueryBuilder):
-    def build_fetch_query(self, operator_id: str):
+    def build_fetch_query(self, operator_id: str, up_to_block: Optional[int] = None):
         return delegator_shares_query, {"operator_id": operator_id}
 
-    def build_insert_query(self) -> str:
+    def build_insert_query(self, is_snapshot: bool = False) -> str:
         return """
 INSERT INTO operator_delegator_shares (
     id, operator_id, staker_id, strategy_id, shares, shares_updated_at,
@@ -73,7 +74,7 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at = EXCLUDED.updated_at
 """
 
-    def generate_id(self, row: dict) -> str:
+    def generate_id(self, row: dict, is_snapshot: bool = False) -> str:
         return f"{row['operator_id']}-{row['staker_id']}-{row['strategy_id']}"
 
     def get_column_names(self) -> list:

@@ -370,7 +370,7 @@ class OperatorDelegator(Base, TimestampMixin):
 
     # Current Status
     is_delegated = Column(Boolean, default=True, index=True)
-    delegated_at = Column(DateTime, nullable=False)
+    delegated_at = Column(DateTime, nullable=True)
     undelegated_at = Column(DateTime)
 
     __table_args__ = (

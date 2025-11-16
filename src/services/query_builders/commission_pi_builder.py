@@ -1,4 +1,5 @@
 # services/query_builders/commission_pi_builder.py
+from typing import Optional
 from .base_builder import BaseQueryBuilder
 
 commission_pi_query = """
@@ -18,10 +19,10 @@ ORDER BY operator_id, block_number DESC, log_index DESC
 
 
 class CommissionPIQueryBuilder(BaseQueryBuilder):
-    def build_fetch_query(self, operator_id: str):
+    def build_fetch_query(self, operator_id: str, up_to_block: Optional[int] = None):
         return commission_pi_query, {"operator_id": operator_id}
 
-    def build_insert_query(self) -> str:
+    def build_insert_query(self, is_snapshot: bool = False) -> str:
         return """
 INSERT INTO operator_commission_rates (
     id, operator_id, commission_type, current_bips, current_activated_at,
@@ -40,7 +41,7 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at = EXCLUDED.updated_at
 """
 
-    def generate_id(self, row: dict) -> str:
+    def generate_id(self, row: dict, is_snapshot: bool = False) -> str:
         return f"{row['operator_id']}-{row['commission_type']}"
 
     def get_column_names(self) -> list:

@@ -29,6 +29,11 @@ from .assets.state_rebuild import (
 from .assets.snapshots import (
     operator_daily_snapshots_asset,
     operator_strategy_daily_snapshots_asset,
+    operator_avs_relationship_snapshots_asset,
+    operator_delegator_shares_snapshots_asset,
+    operator_commission_rates_snapshots_asset,
+    operator_allocation_snapshots_asset,
+    network_daily_aggregates_asset,
 )
 
 from .assets.analytics import (
@@ -60,6 +65,11 @@ state_rebuild_assets = [
 snapshot_assets = [
     operator_daily_snapshots_asset,
     operator_strategy_daily_snapshots_asset,
+    operator_avs_relationship_snapshots_asset,
+    operator_delegator_shares_snapshots_asset,
+    operator_commission_rates_snapshots_asset,
+    operator_allocation_snapshots_asset,
+    network_daily_aggregates_asset,
 ]
 
 analytics_assets = [

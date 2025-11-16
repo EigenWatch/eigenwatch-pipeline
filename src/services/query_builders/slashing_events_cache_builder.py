@@ -1,4 +1,5 @@
 # services/query_builders/slashing_events_cache_builder.py
+from typing import Optional
 from .base_builder import BaseQueryBuilder
 
 slashing_events_cache_query = """
@@ -19,10 +20,10 @@ WHERE operator_id = :operator_id
 
 
 class SlashingEventsCacheQueryBuilder(BaseQueryBuilder):
-    def build_fetch_query(self, operator_id: str):
+    def build_fetch_query(self, operator_id: str, up_to_block: Optional[int] = None):
         return slashing_events_cache_query, {"operator_id": operator_id}
 
-    def build_insert_query(self) -> str:
+    def build_insert_query(self, is_snapshot: bool = False) -> str:
         return """
 INSERT INTO slashing_events_cache (
     operator_id, operator_set_id, block_number, transaction_hash,
@@ -36,7 +37,7 @@ ON CONFLICT (operator_id, block_number, transaction_hash) DO UPDATE SET
     updated_at = EXCLUDED.updated_at
 """
 
-    def generate_id(self, row: dict) -> str:
+    def generate_id(self, row: dict, is_snapshot: bool = False) -> str:
         return f"{row['operator_id']}-{row['block_number']}-{row['transaction_hash']}"
 
     def get_column_names(self) -> list:

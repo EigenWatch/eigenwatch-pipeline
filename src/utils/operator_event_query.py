@@ -12,31 +12,39 @@ def build_operator_event_query(
     Returns:
         SQL query string
     """
-    cte_queries = []
+    if not event_tables:
+        raise ValueError("event_tables cannot be empty")
 
+    # Build CTEs
+    cte_queries = []
     for table in event_tables:
         cte_name = table.lower().replace(".", "_")
         cte_queries.append(
             f"""
-        {cte_name} AS (
-            SELECT DISTINCT operator_id
-            FROM {table}
-            WHERE {cutoff_column} <= {cutoff_param}  -- for block queries
-        )
-        """
+            {cte_name} AS (
+                SELECT DISTINCT operator_id
+                FROM {table}
+                WHERE {cutoff_column} <= {cutoff_param}
+            )
+            """
         )
 
-    # Combine all CTEs in a single UNION query
     cte_list = ",\n".join(cte_queries)
-    union_queries = "\nUNION\n".join(
-        [table.lower().replace(".", "_") for table in event_tables]
+
+    # Build UNION SELECT from each CTE
+    union_selects = "\nUNION\n".join(
+        [
+            f"SELECT operator_id FROM {table.lower().replace('.', '_')}"
+            for table in event_tables
+        ]
     )
 
     query = f"""
     WITH
     {cte_list}
-    SELECT operator_id FROM {union_queries}
+    {union_selects}
     """
+
     return query
 
 

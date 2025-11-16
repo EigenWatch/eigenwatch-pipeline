@@ -1,4 +1,5 @@
 # services/query_builders/delegator_current_builder.py
+from typing import Optional
 from .base_builder import BaseQueryBuilder
 
 delegator_current_query = """
@@ -33,10 +34,10 @@ LEFT JOIN first_delegation fd ON ld.staker_id = fd.staker_id
 
 
 class DelegatorCurrentQueryBuilder(BaseQueryBuilder):
-    def build_fetch_query(self, operator_id: str):
+    def build_fetch_query(self, operator_id: str, up_to_block: Optional[int] = None):
         return delegator_current_query, {"operator_id": operator_id}
 
-    def build_insert_query(self) -> str:
+    def build_insert_query(self, is_snapshot: bool = False) -> str:
         return """
 INSERT INTO operator_delegators (
     id, operator_id, staker_id, is_delegated, delegated_at, undelegated_at, updated_at
@@ -51,7 +52,7 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at = EXCLUDED.updated_at
 """
 
-    def generate_id(self, row: dict) -> str:
+    def generate_id(self, row: dict, is_snapshot: bool = False) -> str:
         return f"{row['operator_id']}-{row['staker_id']}"
 
     def get_column_names(self) -> list:

@@ -66,13 +66,6 @@ def operator_daily_snapshots_asset(
     snapshot_block = get_snapshot_block_for_date(
         db,
         snapshot_date,
-        [
-            "allocation_events",
-            "operator_avs_registration_history",
-            "operator_delegator_history",
-            "operator_slashing_incidents",
-            "operator_pi_commission_bips_set_events",
-        ],
     )
 
     if snapshot_block == 0:
@@ -133,7 +126,6 @@ def operator_strategy_daily_snapshots_asset(
     snapshot_block = get_snapshot_block_for_date(
         db,
         snapshot_date,
-        ["max_magnitude_updated_events", "encumbered_magnitude_updated_events"],
     )
 
     if snapshot_block == 0:
@@ -193,7 +185,8 @@ def operator_avs_relationship_snapshots_asset(
     snapshot_date = datetime.strptime(partition_date_str, "%Y-%m-%d").date()
 
     snapshot_block = get_snapshot_block_for_date(
-        db, snapshot_date, ["operator_avs_registration_history"]
+        db,
+        snapshot_date,
     )
 
     if snapshot_block == 0:
@@ -248,7 +241,6 @@ def operator_delegator_shares_snapshots_asset(
     snapshot_block = get_snapshot_block_for_date(
         db,
         snapshot_date,
-        ["operator_delegator_shares_events", "operator_delegator_history"],
     )
 
     if snapshot_block == 0:
@@ -303,11 +295,6 @@ def operator_commission_rates_snapshots_asset(
     snapshot_block = get_snapshot_block_for_date(
         db,
         snapshot_date,
-        [
-            "operator_pi_commission_bips_set_events",
-            "operator_avs_commission_bips_set_events",
-            "operator_operator_set_commission_bips_set_events",
-        ],
     )
 
     if snapshot_block == 0:
@@ -365,7 +352,8 @@ def operator_allocation_snapshots_asset(
     snapshot_date = datetime.strptime(partition_date_str, "%Y-%m-%d").date()
 
     snapshot_block = get_snapshot_block_for_date(
-        db, snapshot_date, ["allocation_events"]
+        db,
+        snapshot_date,
     )
 
     if snapshot_block == 0:
@@ -422,6 +410,31 @@ def network_daily_aggregates_asset(
 
     context.log.info(f"Calculating network aggregates for {snapshot_date}")
 
+    # First check if there are any snapshots for this date
+    check_query = """
+    SELECT COUNT(*) FROM operator_daily_snapshots 
+    WHERE snapshot_date = :snapshot_date
+    """
+
+    result = db.execute_query(
+        check_query, {"snapshot_date": snapshot_date}, db="analytics"
+    )
+
+    snapshot_count = result[0][0] if result else 0
+
+    if snapshot_count == 0:
+        context.log.warning(
+            f"No operator snapshots found for {snapshot_date}. Skipping network aggregates."
+        )
+        return Output(
+            0,
+            metadata={
+                "snapshot_date": str(snapshot_date),
+                "skipped": True,
+                "reason": "no_operator_snapshots",
+            },
+        )
+
     # Query to calculate all network statistics in one go
     query = """
     WITH operator_tvs AS (
@@ -431,6 +444,11 @@ def network_daily_aggregates_asset(
         FROM operator_strategy_daily_snapshots oss
         WHERE oss.snapshot_date = :snapshot_date
         GROUP BY oss.operator_id
+    ),
+    snapshot_block_cte AS (
+        SELECT COALESCE(MAX(snapshot_block), 0) as snapshot_block
+        FROM operator_daily_snapshots 
+        WHERE snapshot_date = :snapshot_date
     ),
     network_stats AS (
         SELECT
@@ -472,7 +490,7 @@ def network_daily_aggregates_asset(
     )
     SELECT
         :snapshot_date,
-        (SELECT MAX(snapshot_block) FROM operator_daily_snapshots WHERE snapshot_date = :snapshot_date),
+        sb.snapshot_block,
         total_operators, active_operators,
         COALESCE(total_tvs, 0), COALESCE(mean_tvs, 0), COALESCE(median_tvs, 0),
         COALESCE(p25_tvs, 0), COALESCE(p75_tvs, 0), COALESCE(p90_tvs, 0),
@@ -481,6 +499,7 @@ def network_daily_aggregates_asset(
         COALESCE(mean_avs_per_operator, 0), COALESCE(median_avs_per_operator, 0),
         COALESCE(mean_pi_commission_bips, 0), COALESCE(median_pi_commission_bips, 0)
     FROM network_stats
+    CROSS JOIN snapshot_block_cte sb
     ON CONFLICT (snapshot_date) DO UPDATE SET
         snapshot_block = EXCLUDED.snapshot_block,
         total_operators = EXCLUDED.total_operators,
@@ -513,5 +532,6 @@ def network_daily_aggregates_asset(
         metadata={
             "snapshot_date": str(snapshot_date),
             "aggregated": True,
+            "operator_snapshots_count": snapshot_count,
         },
     )

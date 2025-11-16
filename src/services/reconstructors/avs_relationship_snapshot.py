@@ -1,5 +1,6 @@
 # services/reconstructors/avs_relationship_snapshot.py
 
+from typing import Dict, List, Optional
 from .base import BaseReconstructor
 from services.validators.fieldValidator import FieldValidator
 from ..query_builders.avs_relationship_snapshot_builder import (
@@ -34,3 +35,31 @@ class AVSRelationshipSnapshotReconstructor(BaseReconstructor):
             column_names=column_names,
             field_validator=field_validator,
         )
+
+    def fetch_state_for_operator(
+        self, operator_id: str, up_to_block: Optional[int] = None
+    ) -> List[Dict]:
+        """Override to fetch from events DB and enrich with analytics DB data"""
+
+        # Fetch relationship data from events DB
+        fetch_query, params = self.query_builder.build_fetch_query(
+            operator_id, up_to_block
+        )
+        rows = self.db.execute_query(fetch_query, params, db="events")
+        relationship_data = self.tuple_to_dict_transformer(self.column_names)(rows)
+
+        # Fetch operator set counts and commission from analytics DB
+        analytics_metrics = self.query_builder.fetch_analytics_metrics(
+            self.db, operator_id, up_to_block
+        )
+
+        # Enrich relationship data with analytics metrics
+        for row in relationship_data:
+            avs_id = row["avs_id"]
+            metrics = analytics_metrics.get(avs_id, {})
+            row["active_operator_set_count"] = metrics.get(
+                "active_operator_set_count", 0
+            )
+            row["avs_commission_bips"] = metrics.get("avs_commission_bips")
+
+        return relationship_data
