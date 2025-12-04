@@ -1,4 +1,4 @@
-# analytics_pipeline/resources.py
+# /pipeline/defs/resources.py
 """
 Dagster Resources for database connections and configuration
 """
