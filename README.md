@@ -1,535 +1,286 @@
-# Operator Analytics Pipeline
+# EigenWatch Pipeline
 
-A Dagster-based data pipeline for operator profiling and risk analysis, processing EigenLayer protocol events into actionable analytics.
+A unified Dagster-based data pipeline for processing EigenLayer protocol events and generating operator analytics. Combines event extraction from The Graph subgraph with comprehensive risk analysis and profiling.
 
-## Architecture Overview
+## Architecture
 
-### Design Principles
-
-- **Entity-Centric Processing**: Query changed operators via entity tables (single timestamp cursor)
-- **Full State Reconstruction**: Always rebuild from complete event history (not incremental deltas)
-- **SQL-First Approach**: Leverage database aggregations and window functions
-- **Clear Phase Separation**: Extract → Transform → Load → Analyze
-
-### Pipeline Flow
+The pipeline operates in distinct phases with clear separation of concerns:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  PHASE 1: EXTRACTION                                    │
-│  changed_operators_since_last_run                       │
-│  - Query all event tables for operators with changes    │
-│  - Use timestamp-based cursor (no race conditions)      │
-│  - Output: Set of affected operator_ids                 │
-└────────────────┬────────────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────────────┐
-│  PHASE 2: STATE REBUILD (For Affected Operators)       │
-│                                                         │
-│  ├─ operator_strategy_state_asset                      │
-│  │  └─ TVS, encumbered magnitude, utilization          │
-│  │                                                      │
-│  ├─ operator_allocations_asset                         │
-│  │  └─ Current & pending allocations                   │
-│  │                                                      │
-│  ├─ operator_avs_relationships_asset                   │
-│  │  └─ Registration history & current status           │
-│  │                                                      │
-│  ├─ operator_commission_rates_asset                    │
-│  │  └─ Current & upcoming commission rates             │
-│  │                                                      │
-│  ├─ operator_delegators_asset                          │
-│  │  └─ Delegator lists & per-strategy shares           │
-│  │                                                      │
-│  ├─ operator_slashing_incidents_asset                  │
-│  │  └─ Slashing events & amounts                       │
-│  │                                                      │
-│  └─ operator_current_state_asset                       │
-│     └─ Aggregate all metrics into main profile         │
-└────────────────┬────────────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────────────┐
-│  PHASE 3: SNAPSHOTS (Daily, conditional)               │
-│                                                         │
-│  ├─ operator_daily_snapshots_asset                     │
-│  │  └─ Daily copy of operator_current_state            │
-│  │                                                      │
-│  └─ operator_strategy_daily_snapshots_asset            │
-│     └─ Daily copy of operator_strategy_state           │
-└────────────────┬────────────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────────────┐
-│  PHASE 4: ANALYTICS (Daily, after snapshots)           │
-│                                                         │
-│  ├─ volatility_metrics_asset                           │
-│  │  └─ Calculate volatility (7/30/90 day windows)      │
-│  │                                                      │
-│  ├─ concentration_metrics_asset                        │
-│  │  └─ HHI, Gini, distribution metrics                 │
-│  │                                                      │
-│  └─ operator_analytics_asset                           │
-│     └─ Comprehensive risk scores                       │
-└─────────────────────────────────────────────────────────┘
+Event Extraction → State Reconstruction → Daily Snapshots → Analytics
 ```
+
+**Key Design Principles:**
+
+- Entity-centric processing (timestamp-based cursors, no race conditions)
+- Full state reconstruction from complete event history
+- SQL-first approach for performance
+- Idempotent operations (safe to retry)
 
 ## Project Structure
 
 ```
-analytics_pipeline/
-├── __init__.py                 # Dagster definitions
-├── resources.py                # Database and config resources
-├── assets/
-│   ├── extraction.py           # Changed operator detection
-│   ├── state_rebuild.py        # State reconstruction assets
-│   ├── snapshots.py            # Daily snapshot creation
-│   └── analytics.py            # Risk scoring and metrics
-├── services/
-│   └── state_reconstructor.py # SQL-based rebuild logic
-└── tests/
-    ├── test_extraction.py
-    ├── test_state_rebuild.py
-    └── test_analytics.py
-
-dagster_home/
-├── dagster.yaml                # Instance configuration
-├── workspace.yaml              # Workspace configuration
-└── .env                        # Environment variables
+pipeline/
+├── src/
+│   ├── pipeline/              # Analytics & state management
+│   │   ├── defs/             # Dagster assets & resources
+│   │   ├── db/               # Database models
+│   │   └── services/         # Processing & reconstruction logic
+│   └── subgraph_pipeline/    # Event extraction
+│       ├── defs/             # Event extraction assets
+│       ├── models/           # Event & entity models
+│       └── utils/            # Subgraph client
+├── alembic/
+│   ├── events/              # Event DB migrations
+│   └── analytics/           # Analytics DB migrations
+├── dagster.yaml             # Dagster instance config
+└── .env                     # Environment variables
 ```
 
-## Installation
+## Quick Start
 
 ### Prerequisites
 
-- Python 3.10+
-- PostgreSQL 14+
-- Two databases:
-  - `eigenlayer_events` (populated by subgraph pipeline)
-  - `eigenlayer_analytics` (created by this pipeline)
+- Python 3.9-3.13
+- PostgreSQL 12+
+- The Graph API access
 
-### Setup
+### Installation
 
-1. **Clone and install:**
+**Using uv (recommended):**
 
 ```bash
-git clone <repository>
-cd analytics_pipeline
-pip install -e .
-```
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-2. **Configure environment:**
+# Create virtual environment and install dependencies
+uv sync
 
-```bash
-cp .env.example .env
-# Edit .env with your database URLs
-```
+# Activate virtual environment
+source .venv/bin/activate  # macOS/Linux
+# or
+.venv\Scripts\activate     # Windows
 
-3. **Initialize Dagster:**
+# Run migrations
+make events-upgrade
+make analytics-upgrade
 
-```bash
-export DAGSTER_HOME=/path/to/dagster_home
-dagster instance migrate
-```
-
-4. **Create analytics database tables:**
-
-```bash
-# Run migration scripts to create analytics tables
-python scripts/create_analytics_tables.py
-```
-
-## Usage
-
-### Running the Pipeline
-
-**Option 1: Dagster UI (Development)**
-
-```bash
+# Start Dagster
 dagster dev
-# Navigate to http://localhost:3000
-# Launch jobs manually or wait for schedules
 ```
 
-**Option 2: Dagster Daemon (Production)**
+**Using pip:**
 
 ```bash
-# Start the daemon (handles schedules)
-dagster-daemon run
+python3 -m venv .venv
+source .venv/bin/activate  # macOS/Linux
+pip install -e ".[dev]"
 
-# In separate terminal, start the UI
-dagster-webserver -h 0.0.0.0 -p 3000
+# Then run migrations and start Dagster as above
 ```
 
-### Schedules
+### 3. **Create `.python-version`** (optional but recommended)
 
-The pipeline runs on three schedules:
+Create a new file `.python-version` in the project root:
 
-1. **State Update Job** (`operator_state_update`)
+```
+3.12
+```
 
-   - **Schedule**: Every 6 hours (`0 */6 * * *`)
-   - **Purpose**: Process new events and rebuild affected operator state
-   - **Duration**: ~5-30 minutes (depending on changes)
+This tells `uv` which Python version to use.
 
-2. **Snapshot Job** (`operator_snapshots`)
+### 4. **Update `.gitignore`**
 
-   - **Schedule**: Daily at 00:05 UTC (`5 0 * * *`)
-   - **Purpose**: Create daily snapshots of all operator state
-   - **Duration**: ~2-5 minutes
+Add uv-specific entries if not already present:
 
-3. **Analytics Job** (`operator_analytics`)
-   - **Schedule**: Daily at 00:30 UTC (`30 0 * * *`)
-   - **Purpose**: Calculate risk scores and metrics
-   - **Duration**: ~5-15 minutes
+```
+# uv
+.venv/
+uv.lock
+.python-version
+```
 
-### Manual Execution
+Visit http://localhost:3000 to access the Dagster UI.
+
+## Environment Variables
+
+Required variables in `.env`:
 
 ```bash
-# Run state update for latest changes
-dagster job execute -j operator_state_update
+# Dagster Configuration
+DAGSTER_HOME=/home/didi/Code/work/eigenwatch/pipeline/
+DAGSTER_PG_URL=postgresql://postgres:secret@localhost:5432/dagster
 
-# Create snapshots for yesterday
-dagster job execute -j operator_snapshots
+# Analytics Pipeline - Database URLs
+EVENTS_DB_URL=postgresql+psycopg2://postgres:secret@localhost:5432/eigenwatch_staging_db
+ANALYTICS_DB_URL=postgresql+psycopg2://postgres:secret@localhost:5432/eigenwatch_analytics
 
-# Calculate analytics
-dagster job execute -j operator_analytics
+# Subgraph Config
+SUBGRAPH_ENDPOINT=https://api.studio.thegraph.com/query/YOUR_ID/YOUR_SUBGRAPH/version/latest
+SUBGRAPH_API_KEY=your_subgraph_api_key_here
+RESULTS_PER_QUERY=100
 
-# Backfill snapshots for date range
-dagster job backfill -j operator_snapshots \
-  --from 2024-01-01 --to 2024-01-31
+# Analytics Pipeline Configuration
+DEFAULT_REGISTERED_AT=2025-05-31T03:22:47Z
+SAFETY_BUFFER_BLOCKS=10
+SAFETY_BUFFER_SECONDS=60
+MAX_OPERATORS_PER_BATCH=100
+MAX_BLOCKS_PER_RUN=1000
+SNAPSHOT_HOUR_UTC=0
+
+# Logging configuration
+LOG_BATCH_PROGRESS_EVERY=10
+ENABLE_DETAILED_LOGGING=true
+
+# Analytics settings
+VOLATILITY_WINDOWS=7,30,90
+MIN_DATA_POINTS_FOR_ANALYTICS=7
+
+# Performance optimization
+USE_BULK_OPERATIONS=true
+COMMIT_BATCH_SIZE=50
+
+# Pagination limits
+MAX_SKIP=5000
+BATCH_SIZE=1000
+
+# Retry settings
+MAX_RETRIES=3
+RETRY_DELAY_SECONDS=5
+
+# Development/Debug Settings
+DEBUG=true
+LOG_LEVEL=DEBUG
+DAGSTER_DBT_PARSE_PROJECT_ON_LOAD=1
 ```
 
-## Configuration
+See `example.env` for complete configuration options.
 
-### Database Resources
+## Pipeline Schedules
 
-Configure in `.env`:
+The pipeline consists of two main components with different scheduling strategies:
+
+### Event Extraction Pipeline (Subgraph)
+
+Processes blockchain events from EigenLayer smart contracts via The Graph subgraph. Runs **4 times daily** (every 6 hours) with staggered execution to prevent overlap:
+
+| Job                            | Contracts          | Schedule (UTC)             | Description                          |
+| ------------------------------ | ------------------ | -------------------------- | ------------------------------------ |
+| **delegation_manager_events**  | DelegationManager  | 00:00, 06:00, 12:00, 18:00 | Delegation and undelegation events   |
+| **allocation_manager_events**  | AllocationManager  | 00:30, 06:30, 12:30, 18:30 | Allocation modifications and delays  |
+| **avs_directory_events**       | AVSDirectory       | 01:00, 07:00, 13:00, 19:00 | AVS registration and operator status |
+| **rewards_coordinator_events** | RewardsCoordinator | 01:30, 07:30, 13:30, 19:30 | Reward submissions and claims        |
+| **strategy_manager_events**    | StrategyManager    | 02:00, 08:00, 14:00, 20:00 | Deposit and withdrawal events        |
+| **eigenpod_manager_events**    | EigenPodManager    | 02:30, 08:30, 14:30, 20:30 | Pod shares and validator events      |
+
+**Total extraction cycle:** ~3 hours (30 min intervals × 6 jobs)  
+**Frequency:** Every 6 hours  
+**Processing strategy:** Incremental with cursor-based checkpoints
+
+### Analytics Pipeline (State & Metrics)
+
+Processes extracted events into operator profiles and analytics. Runs on a coordinated schedule:
+
+| Job                       | Schedule (UTC)                  | Frequency | Description                                                                                                                        |
+| ------------------------- | ------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **operator_state_update** | Every 6 hours<br/>`0 */6 * * *` | 4x daily  | Extract changed operators from events and rebuild their complete state (TVL, delegators, AVS relationships, commissions, slashing) |
+| **operator_snapshots**    | Daily at 00:05<br/>`5 0 * * *`  | Daily     | Create point-in-time snapshots of all operator data for historical analysis and trend tracking                                     |
+| **operator_analytics**    | Daily at 00:30<br/>`30 0 * * *` | Daily     | Calculate risk scores, volatility metrics (7/30/90-day), concentration indices (HHI, Gini), and performance rankings               |
+
+**State update duration:** ~5-30 minutes (varies with event volume)  
+**Snapshot duration:** ~2-5 minutes  
+**Analytics duration:** ~5-15 minutes  
+**Processing strategy:** Full state reconstruction from complete event history (idempotent)
+
+### Execution Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  CONTINUOUS (Every 6 Hours)                                 │
+│  ┌────────────────┐    ┌─────────────────┐                 │
+│  │ Event Jobs     │───▶│ State Rebuild   │                 │
+│  │ (Staggered)    │    │ (Changed Only)  │                 │
+│  └────────────────┘    └─────────────────┘                 │
+└─────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────┐
+│  DAILY (00:05 UTC)                                          │
+│  ┌────────────────┐                                         │
+│  │ Snapshots      │  Point-in-time operator data            │
+│  └────────────────┘                                         │
+└─────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────┐
+│  DAILY (00:30 UTC)                                          │
+│  ┌────────────────┐                                         │
+│  │ Analytics      │  Risk scores, metrics, rankings         │
+│  └────────────────┘                                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Note:** Event extraction frequency is limited by The Graph subgraph indexing speed. Running more frequently than every 6 hours may result in duplicate processing without new data.
+
+## Database Migrations
+
+The project uses separate Alembic environments for each database:
 
 ```bash
-EVENTS_DB_URL=postgresql://user:pass@host:5432/eigenlayer_events
-ANALYTICS_DB_URL=postgresql://user:pass@host:5432/eigenlayer_analytics
-```
+# Events Database
+make events-current              # Show current version
+make events-autogen m="message"  # Generate new migration
+make events-upgrade              # Apply all migrations
+make events-downgrade t="-1"     # Rollback one migration
 
-### Pipeline Settings
+# Analytics Database
+make analytics-current
+make analytics-autogen m="message"
+make analytics-upgrade
+make analytics-downgrade t="-1"
 
-Adjust in `resources.py` or via environment variables:
-
-```python
-# Checkpoint
-checkpoint_key: str = "analytics_pipeline_v1"
-
-# Safety buffers (prevent race conditions)
-safety_buffer_blocks: int = 10
-safety_buffer_seconds: int = 60
-
-# Performance
-max_operators_per_batch: int = 100
-commit_batch_size: int = 50
-
-# Snapshots
-snapshot_hour_utc: int = 0  # Midnight UTC
-
-# Analytics
-volatility_windows: list = [7, 30, 90]  # Days
-min_data_points_for_analytics: int = 7
-```
-
-## Key Features
-
-### 1. No Race Conditions
-
-- **Problem**: Subgraph loads 100 events/batch; some blocks partially loaded
-- **Solution**: Entity-centric timestamp cursor
-  - Query: "Which operators had events since last run?"
-  - Always rebuild full state from ALL events
-  - Eventual consistency guaranteed
-
-### 2. Idempotent Operations
-
-- Reprocessing same operators produces same results
-- Safe to re-run failed jobs
-- No partial state updates
-
-### 3. SQL-First Performance
-
-- Bulk operations via CTEs and window functions
-- Minimal application-level loops
-- Database handles aggregations
-
-### 4. Clear Dependencies
-
-```
-changed_operators → [state_assets] → current_state → snapshots → analytics
-```
-
-Dagster ensures correct execution order
-
-### 5. Partitioned Analytics
-
-- Daily partitions for snapshots and analytics
-- Easy backfilling: `dagster job backfill --from X --to Y`
-- Incremental processing of historical data
-
-## Monitoring
-
-### Dagster UI Metrics
-
-- Asset materialization status
-- Run duration and success rate
-- Partition coverage
-- Metadata (operators processed, duration, etc.)
-
-### Custom Metrics (in logs)
-
-```python
-context.log.info(f"Processed {count} operators in {duration}s")
-```
-
-### Database Queries
-
-```sql
--- Check pipeline lag
-SELECT
-  last_processed_at,
-  NOW() - last_processed_at as lag
-FROM pipeline_checkpoints
-WHERE pipeline_name = 'analytics_pipeline_v1';
-
--- Count processed operators
-SELECT COUNT(*)
-FROM operator_current_state
-WHERE updated_at > NOW() - INTERVAL '1 hour';
-
--- Analytics coverage
-SELECT
-  date,
-  COUNT(*) as operators_analyzed
-FROM operator_analytics
-GROUP BY date
-ORDER BY date DESC
-LIMIT 7;
-```
-
-## Troubleshooting
-
-### Pipeline Not Processing Operators
-
-**Symptom**: `changed_operators_since_last_run` returns 0
-
-**Causes**:
-
-1. No new events in source database
-2. Checkpoint timestamp too recent
-
-**Solutions**:
-
-```sql
--- Check latest events
-SELECT MAX(created_at) FROM allocation_events;
-
--- Reset checkpoint to reprocess
-UPDATE pipeline_checkpoints
-SET last_processed_at = '2024-01-01'
-WHERE pipeline_name = 'analytics_pipeline_v1';
-```
-
-### Slow State Rebuild
-
-**Symptom**: `operator_current_state_asset` takes >30 minutes
-
-**Causes**:
-
-1. Too many operators changed
-2. Missing database indexes
-
-**Solutions**:
-
-```sql
--- Check operator count
-SELECT COUNT(*) FROM operators;
-
--- Add indexes
-CREATE INDEX CONCURRENTLY idx_allocation_events_operator_created
-ON allocation_events(operator_id, created_at);
-
--- Increase batch size
-# In resources.py
-max_operators_per_batch: int = 200
-```
-
-### Snapshots Not Created
-
-**Symptom**: No rows in `operator_daily_snapshots`
-
-**Causes**:
-
-1. Current time < snapshot_hour_utc
-2. No data in `operator_current_state`
-
-**Solutions**:
-
-```python
-# Check snapshot hour setting
-snapshot_hour_utc: int = 0  # Adjust if needed
-
-# Verify source data
-SELECT COUNT(*) FROM operator_current_state;
-```
-
-### Analytics Job Failures
-
-**Symptom**: `operator_analytics_asset` fails with division by zero
-
-**Causes**:
-
-1. Insufficient historical data
-2. No snapshots available
-
-**Solutions**:
-
-```sql
--- Check snapshot coverage
-SELECT
-  COUNT(DISTINCT snapshot_date) as days_of_data
-FROM operator_daily_snapshots;
-
--- Adjust minimum data points
-min_data_points_for_analytics: int = 3  # Lower threshold
+# View migration history
+make events-history
+make analytics-history
 ```
 
 ## Development
 
-### Running Tests
+### Project Entry Point
+
+All Dagster definitions are loaded from `src/pipeline/definitions.py`, which imports and combines assets from both pipeline components.
+
+### Manual Job Execution
 
 ```bash
-pytest tests/ -v
-pytest tests/test_extraction.py -v
+# Process latest events
+dagster job execute -j operator_state_update
+
+# Create snapshots
+dagster job execute -j operator_snapshots
+
+# Run analytics
+dagster job execute -j operator_analytics
 ```
 
-### Adding New Metrics
+## Monitoring
 
-1. **Create new asset** in `assets/analytics.py`:
+### Key Metrics (Dagster UI)
 
-```python
-@asset(
-    ins={"snapshots": AssetIn("operator_daily_snapshots_asset")},
-    description="New custom metric",
-)
-def custom_metric_asset(context, db, config, snapshots):
-    # Calculate metric
-    # Write to database
-    return Output(rowcount)
+- Asset materialization status and timestamps
+- Run duration and success rates
+- Operators processed per run
+- Partition coverage for time-series data
+
+## Production Deployment
+
+```bash
+# Production mode (separate processes)
+dagster-daemon run &           # Handles schedules
+dagster-webserver -h 0.0.0.0  # UI on port 3000
 ```
 
-2. **Add to job** in `__init__.py`:
+## Learn More
 
-```python
-analytics_assets = [
-    ...,
-    custom_metric_asset,
-]
-```
-
-3. **Add dependency** to risk scoring:
-
-```python
-@asset(
-    ins={
-        ...,
-        "custom": AssetIn("custom_metric_asset"),
-    }
-)
-def operator_analytics_asset(...):
-    # Use custom metric in risk calculation
-    pass
-```
-
-### Debugging SQL Queries
-
-Enable query logging in `resources.py`:
-
-```python
-self._analytics_engine = create_engine(
-    self.analytics_db_url,
-    echo=True,  # Logs all SQL queries
-)
-```
-
-## Performance Tuning
-
-### Database Optimization
-
-```sql
--- Essential indexes (already in schema)
-CREATE INDEX idx_operator_current_state_updated
-ON operator_current_state(updated_at);
-
-CREATE INDEX idx_allocation_events_operator_created
-ON allocation_events(operator_id, created_at);
-
--- Analyze tables regularly
-ANALYZE operator_current_state;
-ANALYZE operator_daily_snapshots;
-```
-
-### Pipeline Optimization
-
-```python
-# Increase batch sizes for bulk operations
-commit_batch_size: int = 100
-
-# Parallel processing (future enhancement)
-max_concurrent_operators: int = 10
-
-# Reduce logging in production
-enable_detailed_logging: bool = False
-```
-
-## Deployment
-
-### Production Checklist
-
-- [ ] Configure production database URLs
-- [ ] Set up database backups
-- [ ] Enable Dagster monitoring
-- [ ] Configure alerting (e.g., PagerDuty)
-- [ ] Set resource limits (CPU, memory)
-- [ ] Enable query logging for errors only
-- [ ] Schedule regular vacuum/analyze
-- [ ] Set up log aggregation
-
-### Kubernetes Deployment
-
-```yaml
-# dagster-deployment.yaml (example)
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: dagster-webserver
-spec:
-  replicas: 1
-  template:
-    spec:
-      containers:
-        - name: dagster-webserver
-          image: analytics-pipeline:latest
-          command: ["dagster-webserver"]
-          env:
-            - name: EVENTS_DB_URL
-              valueFrom:
-                secretKeyRef:
-                  name: db-credentials
-                  key: events-url
-```
-
-## License
-
-MIT
-
-## Support
-
-For issues or questions:
-
-- GitHub Issues: <repository>/issues
-- Documentation: <repository>/wiki
-- Email: team@example.com
+- [Dagster Documentation](https://docs.dagster.io/)
+- [The Graph Documentation](https://thegraph.com/docs/)

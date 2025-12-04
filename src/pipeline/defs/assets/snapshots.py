@@ -7,32 +7,32 @@ UPDATED VERSION with new assets and refactored existing ones
 from dagster import asset, OpExecutionContext, Output, DailyPartitionsDefinition
 from datetime import datetime
 
-from services.processors.process_operators_snapshot import (
+from pipeline.services.processors.process_operators_snapshot import (
     process_operators_for_snapshot,
 )
-from utils.operator_snapshot_utils import (
+from pipeline.utils.operator_snapshot_utils import (
     get_operators_active_by_block,
     get_snapshot_block_for_date,
 )
 from ..resources import DatabaseResource, ConfigResource
 
 # Import ALL reconstructors
-from services.reconstructors.operator_daily_snapshot import (
+from pipeline.services.reconstructors.operator_daily_snapshot import (
     OperatorDailySnapshotReconstructor,
 )
-from services.reconstructors.operator_strategy_snapshot import (
+from pipeline.services.reconstructors.operator_strategy_snapshot import (
     OperatorStrategySnapshotReconstructor,
 )
-from services.reconstructors.allocation_snapshot import (
+from pipeline.services.reconstructors.allocation_snapshot import (
     AllocationSnapshotReconstructor,
 )
-from services.reconstructors.avs_relationship_snapshot import (
+from pipeline.services.reconstructors.avs_relationship_snapshot import (
     AVSRelationshipSnapshotReconstructor,
 )
-from services.reconstructors.delegator_shares_snapshot import (
+from pipeline.services.reconstructors.delegator_shares_snapshot import (
     DelegatorSharesSnapshotReconstructor,
 )
-from services.reconstructors.commission_rates_snapshot import (
+from pipeline.services.reconstructors.commission_rates_snapshot import (
     CommissionRatesSnapshotReconstructor,
 )
 

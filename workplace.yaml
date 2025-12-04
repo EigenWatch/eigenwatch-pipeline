@@ -1,0 +1,16 @@
+# Dagster workspace configuration
+# Defines code locations that Dagster will load
+
+load_from:
+  - python_module:
+      module_name: pipeline.definitions
+      location_name: eigenwatch_pipeline
+      working_directory: /home/didi/Code/work/eigenwatch/pipeline/src
+
+      # Optional: Reload on file changes (useful for development)
+      reload_on_update: true
+
+      # Optional: Environment variables specific to this location
+      # (These override .env for this location only)
+      # env:
+      #   LOG_LEVEL: DEBUG
