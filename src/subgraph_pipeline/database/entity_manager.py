@@ -4,7 +4,14 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 import dagster as dg
 
-from models.entities import Operator, Staker, AVS, Strategy, OperatorSet, EigenPod
+from subgraph_pipeline.models.entities import (
+    Operator,
+    Staker,
+    AVS,
+    Strategy,
+    OperatorSet,
+    EigenPod,
+)
 
 
 class EntityManager(dg.ConfigurableResource):

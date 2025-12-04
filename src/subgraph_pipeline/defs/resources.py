@@ -35,7 +35,7 @@ def get_subgraph_resources():
         ),
         # Database client for Postgres
         "db_client": DatabaseClient(
-            connection_string=dg.EnvVar("POSTGRES_CONNECTION_STRING"),
+            connection_string=dg.EnvVar("EVENTS_DB_URL"),
             pool_size=5,
             max_overflow=10,
         ),
