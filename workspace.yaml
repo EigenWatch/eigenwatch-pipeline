@@ -1,7 +1,0 @@
-# workspace.yaml
-# Dagster workspace configuration
-
-load_from:
-  - python_package:
-      package_name: analytics_pipeline
-      location_name: operator_analytics

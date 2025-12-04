@@ -7,7 +7,7 @@ from dagster import asset, OpExecutionContext
 from datetime import datetime, timezone
 from typing import Set
 
-from utils.operator_event_query import (
+from pipeline.utils.operator_event_query import (
     build_operator_event_query,
     default_operator_event_tables,
 )
