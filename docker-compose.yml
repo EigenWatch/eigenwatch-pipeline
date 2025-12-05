@@ -1,0 +1,103 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: eigenwatch-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dagster123}
+      POSTGRES_DB: dagster
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - dagster_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Dagster Webserver (UI)
+  dagster-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eigenwatch-webserver
+    image: eigenwatch-pipeline:latest
+    command: dagster-webserver -h 0.0.0.0 -p 3001 -m pipeline.definitions
+    ports:
+      - "3001:3001"
+    environment:
+      DAGSTER_HOME: /opt/dagster/home
+      DAGSTER_PG_URL: postgresql://postgres:${POSTGRES_PASSWORD:-dagster123}@postgres:5432/dagster
+      EVENTS_DB_URL: postgresql+psycopg2://postgres:${POSTGRES_PASSWORD:-dagster123}@postgres:5432/eigenwatch_staging_db
+      ANALYTICS_DB_URL: postgresql+psycopg2://postgres:${POSTGRES_PASSWORD:-dagster123}@postgres:5432/eigenwatch_analytics
+      SUBGRAPH_ENDPOINT: ${SUBGRAPH_ENDPOINT}
+      SUBGRAPH_API_KEY: ${SUBGRAPH_API_KEY}
+      RESULTS_PER_QUERY: ${RESULTS_PER_QUERY:-100}
+      DEFAULT_REGISTERED_AT: ${DEFAULT_REGISTERED_AT:-2025-05-31T03:22:47Z}
+      SAFETY_BUFFER_BLOCKS: ${SAFETY_BUFFER_BLOCKS:-10}
+      SAFETY_BUFFER_SECONDS: ${SAFETY_BUFFER_SECONDS:-60}
+      MAX_OPERATORS_PER_BATCH: ${MAX_OPERATORS_PER_BATCH:-100}
+      MAX_BLOCKS_PER_RUN: ${MAX_BLOCKS_PER_RUN:-1000}
+      SNAPSHOT_HOUR_UTC: ${SNAPSHOT_HOUR_UTC:-0}
+      LOG_BATCH_PROGRESS_EVERY: ${LOG_BATCH_PROGRESS_EVERY:-10}
+      ENABLE_DETAILED_LOGGING: ${ENABLE_DETAILED_LOGGING:-true}
+      VOLATILITY_WINDOWS: ${VOLATILITY_WINDOWS:-7,30,90}
+      MIN_DATA_POINTS_FOR_ANALYTICS: ${MIN_DATA_POINTS_FOR_ANALYTICS:-7}
+    volumes:
+      - dagster_home:/opt/dagster/home
+      - ./logs:/opt/dagster/home/logs
+    networks:
+      - dagster_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Dagster Daemon (Background processes for schedules/sensors)
+  dagster-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eigenwatch-daemon
+    image: eigenwatch-pipeline:latest
+    command: dagster-daemon run
+    environment:
+      DAGSTER_HOME: /opt/dagster/home
+      DAGSTER_PG_URL: postgresql://postgres:${POSTGRES_PASSWORD:-dagster123}@postgres:5432/dagster
+      EVENTS_DB_URL: postgresql+psycopg2://postgres:${POSTGRES_PASSWORD:-dagster123}@postgres:5432/eigenwatch_staging_db
+      ANALYTICS_DB_URL: postgresql+psycopg2://postgres:${POSTGRES_PASSWORD:-dagster123}@postgres:5432/eigenwatch_analytics
+      SUBGRAPH_ENDPOINT: ${SUBGRAPH_ENDPOINT}
+      SUBGRAPH_API_KEY: ${SUBGRAPH_API_KEY}
+      RESULTS_PER_QUERY: ${RESULTS_PER_QUERY:-100}
+      DEFAULT_REGISTERED_AT: ${DEFAULT_REGISTERED_AT:-2025-05-31T03:22:47Z}
+      SAFETY_BUFFER_BLOCKS: ${SAFETY_BUFFER_BLOCKS:-10}
+      SAFETY_BUFFER_SECONDS: ${SAFETY_BUFFER_SECONDS:-60}
+      MAX_OPERATORS_PER_BATCH: ${MAX_OPERATORS_PER_BATCH:-100}
+      MAX_BLOCKS_PER_RUN: ${MAX_BLOCKS_PER_RUN:-1000}
+      SNAPSHOT_HOUR_UTC: ${SNAPSHOT_HOUR_UTC:-0}
+      LOG_BATCH_PROGRESS_EVERY: ${LOG_BATCH_PROGRESS_EVERY:-10}
+      ENABLE_DETAILED_LOGGING: ${ENABLE_DETAILED_LOGGING:-true}
+      VOLATILITY_WINDOWS: ${VOLATILITY_WINDOWS:-7,30,90}
+      MIN_DATA_POINTS_FOR_ANALYTICS: ${MIN_DATA_POINTS_FOR_ANALYTICS:-7}
+    volumes:
+      - dagster_home:/opt/dagster/home
+      - ./logs:/opt/dagster/home/logs
+    networks:
+      - dagster_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  dagster_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  dagster_home:

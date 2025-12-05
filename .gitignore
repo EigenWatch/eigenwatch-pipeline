@@ -3,6 +3,12 @@ __pycache__/
 *.py[codz]
 *$py.class
 .tmp_dagster_home_*/
+..venv/
+
+# Environment files
+.env
+.env.local
+.env.production
 
 # C extensions
 *.so
@@ -137,6 +143,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.docker
 .envrc
 .venv
 env/
@@ -182,6 +189,12 @@ cython_debug/
 # Learn more at https://abstra.io/docs
 .abstra/
 
+# Nux - Local configuration
+.nux/
+
+# Docker documentation (for local reference only)
+DOCKER.md
+
 # Visual Studio Code
 #  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
 #  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
@@ -199,6 +212,10 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
 
 # Streamlit
 .streamlit/secrets.toml

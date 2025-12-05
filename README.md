@@ -41,11 +41,78 @@ pipeline/
 
 ### Prerequisites
 
-- Python 3.9-3.13
-- PostgreSQL 12+
+- Docker and Docker Compose (recommended)
+- OR Python 3.9-3.13 + PostgreSQL 12+ (for local development)
 - The Graph API access
 
-### Installation
+### Option 1: Docker Setup (Recommended)
+
+The easiest way to run the pipeline is using Docker Compose, which handles all dependencies and database setup.
+
+#### 1. Clone and Configure
+
+```bash
+# Clone the repository
+git clone https://github.com/EigenWatch/eigenwatch-pipeline.git
+cd eigenwatch-pipeline
+
+# Copy the environment template
+cp example.env .env
+
+# Edit .env with your credentials
+nano .env  # or use your preferred editor
+```
+
+**Required variables in `.env`:**
+- `SUBGRAPH_ENDPOINT` - Your Graph API endpoint
+- `SUBGRAPH_API_KEY` - Your Graph API key
+- `POSTGRES_PASSWORD` - Database password (default: dagster123)
+
+#### 2. Start Services
+
+```bash
+# Build and start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+```
+
+This starts three services:
+- **PostgreSQL** (port 5432) - Database with auto-initialized schemas
+- **Dagster Webserver** (port 3001) - UI and API
+- **Dagster Daemon** - Background scheduler
+
+#### 3. Run Database Migrations
+
+```bash
+# Access the webserver container
+docker exec -it eigenwatch-webserver bash
+
+# Run migrations for both databases
+cd alembic/analytics && alembic upgrade head
+cd ../events/migrations && alembic upgrade head
+
+exit
+```
+
+#### 4. Access Dagster UI
+
+Open your browser: **http://localhost:3001**
+
+#### 5. Stop Services
+
+```bash
+# Stop services (preserves data)
+docker-compose down
+
+# Stop and remove all data
+docker-compose down -v
+```
+
+### Option 2: Local Development Setup
+
+For development without Docker:
 
 **Using uv (recommended):**
 
@@ -58,8 +125,11 @@ uv sync
 
 # Activate virtual environment
 source .venv/bin/activate  # macOS/Linux
-# or
-.venv\Scripts\activate     # Windows
+
+# Set up PostgreSQL databases
+psql -U postgres -c "CREATE DATABASE dagster;"
+psql -U postgres -c "CREATE DATABASE eigenwatch_staging_db;"
+psql -U postgres -c "CREATE DATABASE eigenwatch_analytics;"
 
 # Run migrations
 make events-upgrade
@@ -76,28 +146,7 @@ python3 -m venv .venv
 source .venv/bin/activate  # macOS/Linux
 pip install -e ".[dev]"
 
-# Then run migrations and start Dagster as above
-```
-
-### 3. **Create `.python-version`** (optional but recommended)
-
-Create a new file `.python-version` in the project root:
-
-```
-3.12
-```
-
-This tells `uv` which Python version to use.
-
-### 4. **Update `.gitignore`**
-
-Add uv-specific entries if not already present:
-
-```
-# uv
-.venv/
-uv.lock
-.python-version
+# Then set up databases and run migrations as above
 ```
 
 Visit http://localhost:3000 to access the Dagster UI.
@@ -272,12 +321,103 @@ dagster job execute -j operator_analytics
 - Operators processed per run
 - Partition coverage for time-series data
 
+## Docker Troubleshooting
+
+### Common Issues
+
+**Database connection errors:**
+```bash
+# Check if PostgreSQL is healthy
+docker-compose ps
+
+# View PostgreSQL logs
+docker-compose logs postgres
+
+# Manually test database connection
+docker exec -it eigenwatch-postgres psql -U postgres -c "\l"
+```
+
+**Container fails to start:**
+```bash
+# Rebuild images
+docker-compose build --no-cache
+
+# Check for port conflicts
+lsof -i :3001  # Check if port 3001 is in use
+lsof -i :5432  # Check if port 5432 is in use
+```
+
+**Migrations not applied:**
+```bash
+# Run migrations manually
+docker exec -it eigenwatch-webserver bash
+cd alembic/analytics && alembic upgrade head
+cd ../events/migrations && alembic upgrade head
+```
+
+**View service logs:**
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f dagster-webserver
+docker-compose logs -f dagster-daemon
+docker-compose logs -f postgres
+```
+
 ## Production Deployment
+
+### Docker Deployment (Recommended)
+
+**On your VPS:**
+
+```bash
+# Clone repository
+git clone https://github.com/EigenWatch/eigenwatch-pipeline.git
+cd eigenwatch-pipeline
+
+# Create production environment file
+cp example.env .env
+nano .env  # Add production values
+
+# Start services in detached mode
+docker-compose up -d
+
+# Run migrations
+docker exec -it eigenwatch-webserver bash
+cd alembic/analytics && alembic upgrade head
+cd ../events/migrations && alembic upgrade head
+exit
+
+# View logs
+docker-compose logs -f
+```
+
+**Setup Nginx reverse proxy (optional):**
+
+```nginx
+# /etc/nginx/sites-available/dagster
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://localhost:3001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### Manual Deployment (Without Docker)
 
 ```bash
 # Production mode (separate processes)
 dagster-daemon run &           # Handles schedules
-dagster-webserver -h 0.0.0.0  # UI on port 3000
+dagster-webserver -h 0.0.0.0 -p 3001  # UI
 ```
 
 ## Learn More
