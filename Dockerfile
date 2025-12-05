@@ -46,5 +46,5 @@ RUN chmod +x /app/start.sh
 ENV DAGSTER_HOME=/app
 
 # 10. Expose Port & Run
-EXPOSE 3000
+EXPOSE 3005
 CMD ["./start.sh"]
