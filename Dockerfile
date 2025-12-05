@@ -1,32 +1,50 @@
-FROM python:3.12-slim as base
+FROM python:3.11-slim
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
-
+# 1. Install System Dependencies
+# 'make' is required for your migration commands.
+# 'curl' is useful for healthchecks.
 RUN apt-get update && apt-get install -y \
-    gcc \
-    postgresql-client \
+    make \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /opt/dagster/app
+# 2. Install 'uv' Package Manager
+# We copy the binary directly from the official uv image (Best Practice)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-COPY pyproject.toml ./
-COPY src/ ./src/
-COPY alembic/ ./alembic/
-COPY dagster.yaml ./
+# 3. Set Working Directory
+WORKDIR /app
 
-RUN pip install --upgrade pip && \
-    pip install -e . && \
-    pip install dagster-webserver==1.11.10 dagster-dg-cli pytest>=7.0.0 black>=23.0.0
+# 4. Install Python Dependencies
+# We copy only the dependency files first to leverage Docker caching.
+# If pyproject.toml hasn't changed, this step is skipped on rebuilds.
+COPY pyproject.toml uv.lock ./
 
-RUN mkdir -p /opt/dagster/home/logs/compute && \
-    mkdir -p /opt/dagster/home/storage
+# Install dependencies into a virtual environment at /app/.venv
+# --frozen: ensures we strictly follow the lock file
+# --no-install-project: installs dependencies only, not your code yet
+RUN uv sync --frozen --no-install-project --no-dev
 
-ENV DAGSTER_HOME=/opt/dagster/home
-ENV PYTHONPATH=/opt/dagster/app/src:$PYTHONPATH
+# 5. Add Virtual Env to PATH
+# This ensures 'dagster', 'alembic', and 'make' use the uv-installed python
+ENV PATH="/app/.venv/bin:$PATH"
 
-EXPOSE 3001
+# 6. Copy Application Code
+COPY . .
 
-CMD ["python", "-m", "dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "3001"]
+# 7. Install the Project
+# Now we install the actual project code
+RUN uv sync --frozen --no-dev
+
+# 8. Setup Startup Script
+# Copy the script we created above and make it executable
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+# 9. Set Dagster Home
+# Dagster looks for dagster.yaml in this directory
+ENV DAGSTER_HOME=/app
+
+# 10. Expose Port & Run
+EXPOSE 3000
+CMD ["./start.sh"]
