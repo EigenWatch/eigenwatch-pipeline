@@ -1,0 +1,85 @@
+# Dagster Configuration
+# Single unified code location for EigenWatch pipeline
+
+# Run launcher
+run_launcher:
+  module: dagster.core.launcher
+  class: DefaultRunLauncher
+
+# Run coordinator - controls concurrent run execution
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 10
+
+# Storage configuration - PostgreSQL for all metadata
+run_storage:
+  module: dagster_postgres.run_storage
+  class: PostgresRunStorage
+  config:
+    postgres_url:
+      env: DAGSTER_PG_URL
+
+event_log_storage:
+  module: dagster_postgres.event_log
+  class: PostgresEventLogStorage
+  config:
+    postgres_url:
+      env: DAGSTER_PG_URL
+
+schedule_storage:
+  module: dagster_postgres.schedule_storage
+  class: PostgresScheduleStorage
+  config:
+    postgres_url:
+      env: DAGSTER_PG_URL
+
+# Compute logs configuration
+compute_logs:
+  module: dagster.core.storage.local_compute_log_manager
+  class: LocalComputeLogManager
+  config:
+    base_dir: /home/didi/Code/work/eigenwatch/pipeline/logs/compute
+
+# Local artifact storage
+local_artifact_storage:
+  module: dagster.core.storage.root
+  class: LocalArtifactStorage
+  config:
+    base_dir: /home/didi/Code/work/eigenwatch/pipeline/.dagster_storage
+
+# Telemetry
+telemetry:
+  enabled: false
+
+# Run monitoring - automatically resume failed runs
+run_monitoring:
+  enabled: true
+  poll_interval_seconds: 120
+  max_resume_run_attempts: 0
+
+# Retention policy - cleanup old runs (correct format)
+retention:
+  schedule:
+    purge_after_days: 90
+  sensor:
+    purge_after_days: 90
+  auto_materialize:
+    purge_after_days: 90
+
+# Python logging
+python_logs:
+  managed_python_loggers:
+    - pipeline
+    - subgraph_pipeline
+  python_log_level: INFO
+
+# Sensor and schedule evaluation
+sensors:
+  use_threads: true
+  num_workers: 4
+
+schedules:
+  use_threads: true
+  num_workers: 4

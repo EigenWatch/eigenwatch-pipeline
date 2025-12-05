@@ -203,5 +203,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-.dagster_storage
 logs
+.dagster_storage
