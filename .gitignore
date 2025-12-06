@@ -222,3 +222,4 @@ docker-compose.override.yml
 
 logs
 .dagster_storage
+.logs_queue

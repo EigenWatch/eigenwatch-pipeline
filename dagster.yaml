@@ -12,6 +12,10 @@ run_coordinator:
   class: QueuedRunCoordinator
   config:
     max_concurrent_runs: 10
+    tag_concurrency_limits:
+      - key: "dagster/backfill"
+        value: { applyLimitPerUniqueValue: false }
+        limit: 2
 
 # Storage configuration - PostgreSQL for all metadata
 run_storage:
