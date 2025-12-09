@@ -480,8 +480,6 @@ def operator_commission_history_asset(
 # -----------------------------
 # Aggregator asset (COMPLETE FIXED VERSION)
 # -----------------------------
-
-
 @asset(
     ins={
         "changed_operators": AssetIn("changed_operators_since_last_run"),
@@ -560,7 +558,7 @@ def operator_current_state_asset(
             SELECT 
                 operator_id,
                 metadata_uri as current_metadata_uri,
-                metadata_json,
+                -- metadata_json removed here
                 metadata_fetched_at,
                 last_updated_at as last_metadata_update_at
             FROM operator_metadata
@@ -705,7 +703,7 @@ def operator_current_state_asset(
         -- FINAL INSERT
         INSERT INTO operator_state (
             operator_id, operator_address,
-            current_metadata_uri, metadata_json, metadata_fetched_at,
+            current_metadata_uri, metadata_fetched_at, -- metadata_json removed here
             registered_at, registration_block,
             first_activity_at, first_activity_block, first_activity_type,
             current_delegation_approver, is_permissioned, delegation_approver_updated_at,
@@ -723,7 +721,7 @@ def operator_current_state_asset(
             oi.operator_address,
             -- Metadata
             mi.current_metadata_uri,
-            mi.metadata_json,
+            -- metadata_json removed here
             mi.metadata_fetched_at,
             -- Registration
             ri.registered_at,
@@ -785,7 +783,7 @@ def operator_current_state_asset(
         
         ON CONFLICT (operator_id) DO UPDATE SET
             current_metadata_uri = EXCLUDED.current_metadata_uri,
-            metadata_json = EXCLUDED.metadata_json,
+            -- metadata_json update removed here
             metadata_fetched_at = EXCLUDED.metadata_fetched_at,
             registered_at = EXCLUDED.registered_at,
             registration_block = EXCLUDED.registration_block,
