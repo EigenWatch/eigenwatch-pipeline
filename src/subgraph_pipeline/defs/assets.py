@@ -412,15 +412,6 @@ def generate_event_assets(selected_event_configs: Dict[str, Dict[str, Any]]):
         # The last asset (_load_event) becomes the dependency for the next group
         previous_group_final_asset = f"load_{config['table_name']}"
 
-        # Optional logging
-        if i == 0:
-            print(f"Starting chain with {event_name}")
-        else:
-            print(f"Chaining {event_name} after previous group")
-
-    print(
-        f"Generated {len(assets)} assets across {len(selected_event_configs)} event groups"
-    )
     return assets
 
 

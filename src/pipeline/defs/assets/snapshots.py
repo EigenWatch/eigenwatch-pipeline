@@ -394,6 +394,19 @@ def operator_allocation_snapshots_asset(
     partitions_def=daily_partitions,
     description="Daily network-wide aggregate statistics for percentile calculations",
     compute_kind="sql",
+    # ------------------------------------------------------------------
+    # ADDED DEPENDENCIES HERE
+    # This ensures this asset will NOT run for a specific date until
+    # all listed assets have successfully finished for that same date.
+    # ------------------------------------------------------------------
+    deps=[
+        operator_daily_snapshots_asset,
+        operator_strategy_daily_snapshots_asset,
+        operator_avs_relationship_snapshots_asset,
+        operator_delegator_shares_snapshots_asset,
+        operator_commission_rates_snapshots_asset,
+        operator_allocation_snapshots_asset,
+    ],
 )
 def network_daily_aggregates_asset(
     context: OpExecutionContext,
@@ -405,6 +418,7 @@ def network_daily_aggregates_asset(
     This should run AFTER all operator snapshots are complete.
     """
 
+    # ... rest of your existing function code ...
     partition_date_str = context.partition_key
     snapshot_date = datetime.strptime(partition_date_str, "%Y-%m-%d").date()
 

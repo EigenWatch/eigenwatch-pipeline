@@ -2,12 +2,13 @@ def build_operator_event_query(
     event_tables: list, cutoff_column: str, cutoff_param: str
 ) -> str:
     """
-    Dynamically build a query to fetch operator_ids that have events in the given tables.
+    Dynamically build a query to fetch operator_ids that have events in the given tables
+    occurring AFTER the cutoff parameter.
 
     Args:
         event_tables: List of table names to check
         cutoff_column: Column to compare (e.g., 'block_number' or 'created_at')
-        cutoff_param: Placeholder for cutoff value (e.g., ':up_to_block', ':last_processed_at')
+        cutoff_param: Placeholder for cutoff value (e.g., ':last_processed_at')
 
     Returns:
         SQL query string
@@ -15,35 +16,20 @@ def build_operator_event_query(
     if not event_tables:
         raise ValueError("event_tables cannot be empty")
 
-    # Build CTEs
-    cte_queries = []
+    # Build a list of SELECT statements with the "greater than" condition
+    select_queries = []
     for table in event_tables:
-        cte_name = table.lower().replace(".", "_")
-        cte_queries.append(
+        select_queries.append(
             f"""
-            {cte_name} AS (
-                SELECT DISTINCT operator_id
-                FROM {table}
-                WHERE {cutoff_column} <= {cutoff_param}
-            )
+            SELECT operator_id
+            FROM {table}
+            WHERE {cutoff_column} > {cutoff_param}
             """
         )
 
-    cte_list = ",\n".join(cte_queries)
-
-    # Build UNION SELECT from each CTE
-    union_selects = "\nUNION\n".join(
-        [
-            f"SELECT operator_id FROM {table.lower().replace('.', '_')}"
-            for table in event_tables
-        ]
-    )
-
-    query = f"""
-    WITH
-    {cte_list}
-    {union_selects}
-    """
+    # Combine them with UNION
+    # UNION automatically removes duplicates between the tables
+    query = "\nUNION\n".join(select_queries)
 
     return query
 

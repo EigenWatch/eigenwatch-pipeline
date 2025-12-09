@@ -103,6 +103,7 @@ state_update_job = define_asset_job(
     selection=AssetSelection.assets(changed_operators_since_last_run)
     | AssetSelection.assets(*state_rebuild_assets),
     description="Extract changed operators and rebuild their state",
+    tags={"dagster/max_workers": 3},
 )
 
 snapshot_job = define_asset_job(

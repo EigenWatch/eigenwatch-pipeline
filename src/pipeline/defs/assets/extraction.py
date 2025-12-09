@@ -7,6 +7,7 @@ from dagster import asset, OpExecutionContext
 from datetime import datetime, timezone
 from typing import Set
 
+from pipeline.utils.debug_log import debug_print
 from pipeline.utils.operator_event_query import (
     build_operator_event_query,
     default_operator_event_tables,
@@ -73,5 +74,7 @@ def changed_operators_since_last_run(
         f"Query duration: {duration:.2f}s, "
         f"Sample operators: {', '.join(list(changed_operators)[:5]) if changed_operators else 'None'}"
     )
+
+    debug_print(len(changed_operators))
 
     return changed_operators
