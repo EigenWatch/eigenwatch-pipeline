@@ -531,7 +531,7 @@ def operator_current_state_asset(
 
     start_time = datetime.now(timezone.utc)
 
-    # COMPLETE FIXED AGGREGATION QUERY
+    # COMPLETE FIXED AGGREGATION QUERY (Removed metadata_fetched_at)
     aggregate_query = """
         WITH operator_info AS (
             SELECT 
@@ -558,8 +558,8 @@ def operator_current_state_asset(
             SELECT 
                 operator_id,
                 metadata_uri as current_metadata_uri,
-                -- metadata_json removed here
-                metadata_fetched_at,
+                -- metadata_json removed
+                -- metadata_fetched_at removed
                 last_updated_at as last_metadata_update_at
             FROM operator_metadata
             WHERE operator_id = :operator_id
@@ -703,7 +703,7 @@ def operator_current_state_asset(
         -- FINAL INSERT
         INSERT INTO operator_state (
             operator_id, operator_address,
-            current_metadata_uri, metadata_fetched_at, -- metadata_json removed here
+            current_metadata_uri, -- metadata_fetched_at removed
             registered_at, registration_block,
             first_activity_at, first_activity_block, first_activity_type,
             current_delegation_approver, is_permissioned, delegation_approver_updated_at,
@@ -721,8 +721,7 @@ def operator_current_state_asset(
             oi.operator_address,
             -- Metadata
             mi.current_metadata_uri,
-            -- metadata_json removed here
-            mi.metadata_fetched_at,
+            -- metadata_fetched_at removed
             -- Registration
             ri.registered_at,
             ri.registration_block,
@@ -783,8 +782,7 @@ def operator_current_state_asset(
         
         ON CONFLICT (operator_id) DO UPDATE SET
             current_metadata_uri = EXCLUDED.current_metadata_uri,
-            -- metadata_json update removed here
-            metadata_fetched_at = EXCLUDED.metadata_fetched_at,
+            -- metadata_fetched_at removed
             registered_at = EXCLUDED.registered_at,
             registration_block = EXCLUDED.registration_block,
             first_activity_at = EXCLUDED.first_activity_at,
