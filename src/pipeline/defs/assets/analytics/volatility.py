@@ -10,6 +10,14 @@ from typing import List, Dict
 from ...resources import DatabaseResource, ConfigResource
 
 
+def get_analysis_date(context: OpExecutionContext) -> datetime.date:
+    """Get the analysis date from partition key or default to yesterday."""
+    if context.has_partition_key:
+        return datetime.strptime(context.partition_key, "%Y-%m-%d").date()
+    else:
+        return (datetime.now() - timedelta(days=1)).date()
+
+
 daily_partitions = DailyPartitionsDefinition(start_date="2024-01-01")
 
 
@@ -92,8 +100,7 @@ def volatility_metrics_asset(
     - avs_count: Number of AVS registrations volatility
     """
 
-    partition_date_str = context.partition_key
-    analysis_date = datetime.strptime(partition_date_str, "%Y-%m-%d").date()
+    analysis_date = get_analysis_date(context)
 
     context.log.info(f"Calculating volatility metrics for {analysis_date}")
 
