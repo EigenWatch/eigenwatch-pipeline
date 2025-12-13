@@ -89,9 +89,10 @@ class BaseReconstructor:
             return 0
 
         insert_query = self.query_builder.build_insert_query(is_snapshot)
-        total = 0
+        validated_rows = []
         skipped = 0
 
+        # Pre-process all rows
         for idx, row in enumerate(rows):
             try:
                 # Validate and transform fields (includes foreign key handling)
@@ -104,14 +105,10 @@ class BaseReconstructor:
                     if row_id is not None:
                         validated_row["id"] = row_id
 
-                # Execute insert/update
-                self.db.execute_update(insert_query, validated_row, db="analytics")
-                total += 1
+                validated_rows.append(validated_row)
 
             except Exception as exc:
                 error_msg = str(exc)
-
-                # Check if it's a foreign key violation (shouldn't happen with auto-creation)
                 if (
                     "ForeignKeyViolation" in error_msg
                     or "foreign key constraint" in error_msg
@@ -120,21 +117,37 @@ class BaseReconstructor:
                         f"Skipping row {idx} for operator {operator_id}: "
                         f"foreign key violation (auto-creation may have failed)"
                     )
-                    self.logger.debug(f"Error: {error_msg}")
                     skipped += 1
                 else:
-                    # Other errors - log as error
                     self.logger.error(
-                        f"Failed to insert row {idx} for operator {operator_id}: {exc}"
+                        f"Failed to validate row {idx} for operator {operator_id}: {exc}"
                     )
                     self.logger.debug(f"Problematic row: {row}")
-
-                # Continue processing other rows
                 continue
+
+        if not validated_rows:
+            return 0
+
+        # Execute batch insert
+        try:
+            total = self.db.execute_batch(insert_query, validated_rows, db="analytics")
+        except Exception as exc:
+            self.logger.error(
+                f"Batch insert failed for operator {operator_id}: {exc}. "
+                "Falling back to row-by-row insert."
+            )
+            # Fallback to row-by-row if batch fails (e.g. one bad row)
+            total = 0
+            for row in validated_rows:
+                try:
+                    self.db.execute_update(insert_query, row, db="analytics")
+                    total += 1
+                except Exception as e:
+                    self.logger.error(f"Fallback insert failed: {e}")
 
         if skipped > 0:
             self.logger.info(
-                f"Skipped {skipped} rows for operator {operator_id} due to constraint violations"
+                f"Skipped {skipped} rows for operator {operator_id} due to validation errors"
             )
 
         # Clear foreign key cache for next operator

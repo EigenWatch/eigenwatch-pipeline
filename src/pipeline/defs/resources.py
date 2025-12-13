@@ -105,12 +105,43 @@ class DatabaseResource(ConfigurableResource):
             result = conn.execute(text(query), params or {})
             return result.fetchall()
 
-    def execute_update(self, query: str, params: dict = None, db: str = "analytics"):
-        """Execute an UPDATE/INSERT/DELETE query"""
+    def execute_update(
+        self, query: str, params: dict = None, db: str = "analytics", connection=None
+    ):
+        """
+        Execute an UPDATE/INSERT/DELETE query.
+        If connection is provided, uses it without closing.
+        If connection is None, creates a new one and commits/closes it.
+        """
+        if connection:
+            result = connection.execute(text(query), params or {})
+            return result.rowcount
+
         engine = self.events_engine if db == "events" else self.analytics_engine
-        with engine.connect() as conn:
+        with engine.begin() as conn:
             result = conn.execute(text(query), params or {})
-            conn.commit()
+            return result.rowcount
+
+    def execute_batch(
+        self,
+        query: str,
+        params_list: list[dict],
+        db: str = "analytics",
+        connection=None,
+    ):
+        """
+        Execute a batch of UPDATE/INSERT/DELETE queries efficiently.
+        """
+        if not params_list:
+            return 0
+
+        if connection:
+            result = connection.execute(text(query), params_list)
+            return result.rowcount
+
+        engine = self.events_engine if db == "events" else self.analytics_engine
+        with engine.begin() as conn:
+            result = conn.execute(text(query), params_list)
             return result.rowcount
 
 

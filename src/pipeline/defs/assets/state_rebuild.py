@@ -809,12 +809,13 @@ def operator_current_state_asset(
             updated_at = EXCLUDED.updated_at;
         """
 
-    for idx, operator_id in enumerate(changed_operators, 1):
-        if idx % config.log_batch_progress_every == 0:
-            context.log.info(
-                f"Aggregating state {idx}/{len(changed_operators)}: {operator_id}"
-            )
-        db.execute_update(aggregate_query, {"operator_id": operator_id}, db="analytics")
+    # Prepare batch parameters
+    params_list = [{"operator_id": op_id} for op_id in changed_operators]
+
+    context.log.info(f"Aggregating state for {len(params_list)} operators in batch...")
+
+    # Execute as a single batch transaction
+    db.execute_batch(aggregate_query, params_list, db="analytics")
 
     duration = (datetime.now(timezone.utc) - start_time).total_seconds()
     current_time = datetime.now(timezone.utc)
